@@ -215,8 +215,6 @@ this is done by the user defined trigger addCar
     print bruceData
 @
 
-produces:
-
 gives:
 
 > main
