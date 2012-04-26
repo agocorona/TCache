@@ -59,7 +59,7 @@ extra-source-files: demos/basicSample.hs demos/caching.hs
 library
     build-depends: base >=4 && <5, directory >=1.0, old-time >=1.0,
                    stm >=2, containers >=0.1.0.1, transformers >=0.2 && <0.3,
-                   text -any, bytestring -any
+                   text -any, bytestring -any, mtl -any
     exposed-modules: Data.TCache Data.TCache.DefaultPersistence
                      Data.TCache.IndexQuery Data.TCache.IndexText Data.TCache.Triggers
                      Data.TCache.IResource Data.TCache.Defs

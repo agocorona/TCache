@@ -65,7 +65,7 @@ with the same type:
 
 then a query for @name '.==.' "Bruce"@  is indistinguishable from @surname '.==.' "Bruce"@
 
-Will return all the registers with surname "Bruce" as well. So if two or more
+Will return indexOf the registers with surname "Bruce" as well. So if two or more
 fields in a registers are to be indexed, they must have different types.
 
 -}
@@ -73,7 +73,7 @@ fields in a registers are to be indexed, they must have different types.
 {-# LANGUAGE  DeriveDataTypeable, MultiParamTypeClasses
 , FunctionalDependencies, FlexibleInstances, UndecidableInstances
 , TypeSynonymInstances, IncoherentInstances #-}
-module Data.TCache.IndexQuery(index, RelationOps(..), recordsWith, (.&&.), (.||.), Select(..)) where
+module Data.TCache.IndexQuery(index, RelationOps(..), indexOf, recordsWith, (.&&.), (.||.), Select(..)) where
 
 import Data.TCache
 import Data.TCache.DefaultPersistence
@@ -237,8 +237,8 @@ instance (Queriable reg a) => RelationOps (reg -> a) a  [DBRef reg] where
 join:: (Queriable rec v, Queriable rec' v)
        =>(v->v-> Bool) -> (rec -> v) -> (rec' -> v) -> STM[([DBRef rec], [DBRef rec'])]
 join op field1 field2 =do
-  idxs   <- retrieveIndexes field1
-  idxs' <- retrieveIndexes field2
+  idxs   <- indexOf field1
+  idxs' <- indexOf field2
   return $ mix  idxs  idxs'
   where
   opv (v, _ )(v', _)= v `op` v'
@@ -302,10 +302,10 @@ instance SetOperations  (JoinData a a') [DBRef a'] (JoinData a a') where
      return [(zs, union xs ys) | (zs,xs) <- xss]
 
 
-
-retrieveIndexes :: (Queriable reg a )
+-- |  return all  the (indexed) registers which has this field
+indexOf :: (Queriable reg a )
                    => (reg -> a) -> STM [(a,[DBRef reg])]
-retrieveIndexes selector= do
+indexOf selector= do
    let [one, two]= typeRepArgs $! typeOf selector
    let rindex= getDBRef $! keyIndex one two
    mindex <- readDBRef rindex
@@ -313,11 +313,11 @@ retrieveIndexes selector= do
 
 retrieve :: Queriable reg a => (reg -> a) -> a -> (a -> a -> Bool) -> STM[DBRef reg]
 retrieve field value op= do
-   index <- retrieveIndexes field
+   index <- indexOf field
    let higuer = map (\(v, vals) -> if op v value then  vals else [])  index
    return $ concat higuer
 
-
+-- from a Query result, return the records, rather than the references
 recordsWith
   :: (IResource a, Typeable a) =>
      STM [DBRef a] -> STM [ a]

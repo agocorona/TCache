@@ -163,7 +163,7 @@ safeWrite filename str= handle  handler  $ B.writeFile filename str  -- !> ("wri
               
 defaultDelete :: String -> IO()
 defaultDelete filename =do
-     removeFile filename
+     handle (handler filename) $ removeFile filename
      --print  ("delete "++filename)
      where
 
@@ -176,7 +176,7 @@ defaultDelete filename =do
             defaultDelete filename  
        | otherwise = do
            hPutStrLn stderr $ "defaultDelResource:  " ++ show e ++  " in file: " ++ filename ++ " retrying"
---           threadDelay 100000  --`debug` ("otherwise " ++ show e)
+--           threadDelay 100000     --`debug` ("otherwise " ++ show e)
            defaultDelete filename
 
 
