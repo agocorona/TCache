@@ -1,6 +1,6 @@
 name: TCache
-version: 0.9.0.4
-cabal-version: -any
+version: 0.10.0.0
+cabal-version: >= 1.2
 build-type: Simple
 license: BSD3
 license-file: LICENSE
@@ -52,19 +52,25 @@ category: Data, Database, Concurrency
 author: Alberto Gómez Corona
 tested-with: GHC ==7.0.3
 data-dir: ""
-extra-source-files: demos/basicSample.hs demos/caching.hs
-                    demos/DBRef.hs demos/DynamicSample.hs demos/IndexQuery.hs
+extra-source-files: demos/DBRef.hs demos/DynamicSample.hs
+                    demos/IndexQuery.hs demos/basicSample.hs demos/caching.hs
                     demos/triggerRelational.lhs
 
 library
-    build-depends: base >=4 && <5, directory >=1.0, old-time >=1.0,
-                   stm >=2, containers >=0.1.0.1, transformers >=0.2 && <0.3,
-                   text -any, bytestring -any, mtl -any
+    build-depends: base >=4 && <5, bytestring -any,
+                   containers >=0.1.0.1, directory >=1.0, old-time >=1.0,
+                   stm -any, text -any, mtl -any,
+                   RefSerialize -any
+
+
     exposed-modules: Data.TCache Data.TCache.DefaultPersistence
-                     Data.TCache.IndexQuery Data.TCache.IndexText Data.TCache.Triggers
-                     Data.TCache.IResource Data.TCache.Defs
-                     Data.TCache.Memoization
+                     Data.TCache.Defs Data.TCache.IResource Data.TCache.IndexQuery
+                     Data.TCache.IndexText Data.TCache.Memoization Data.TCache.Triggers
+                     Data.Persistent.Collection
     exposed: True
     buildable: True
+    extensions: OverlappingInstances UndecidableInstances
+                ScopedTypeVariables DeriveDataTypeable
+    hs-source-dirs: .
     other-modules:
 

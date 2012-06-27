@@ -53,8 +53,10 @@ class IResource a where
         -- | the write operation in persistent storage. It must be strict.  
         -- Since STM transactions may retry, writeResource must be idempotent, not only in the result but also in the effect in the database
         -- all the new obbects are writeen to the database on synchromization
-        -- so writeResource must not autocommit.
+        -- so writeResource when using a database for persistence must not autocommit.
         -- Commit code must be located in the postcondition. (see 'setConditions')
+        -- Since there is no provision for rollback from failure in writing fromIDyn
+        -- persistent storage, 'writeResource' must retry until success.
     	writeResource:: a-> IO()
 
         -- | is called syncronously. It must autocommit   

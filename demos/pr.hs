@@ -2,35 +2,56 @@
 
             #-}
 
+import Data.Persistent.Collection
 import Data.TCache
-import Data.TCache.DefaultPersistence
-import Data.ByteString.Lazy.Char8
-import System.Mem.Weak
-import Debug.Trace
+import Control.Concurrent
+
+quser doc  = getQRef doc
+
+separator= print "----------------"
+
+qdocApprobal doc  = getQRef doc
 
 main= do
-   mapM (\n -> mkWeakPtr  "hi" . Just $ trace "deelte" print (show n))$ Prelude.take 1000 [1..]
+  let readq who= forkIO $ pick  (quser who) >>= \doc -> pop (qdocApprobal   doc)  >>= \x -> print (x :: Bool)
+  putStrLn "boss1 1\r\nboss2 2\r\n"
+  c <- getLine
+  case read c of
+    1 -> readq "boss1" >> aprobal "boss1"
+    2 -> readq "boss2" >> aprobal "boss2"
 
+aprobal who= do
+ separator
+ aprobalList
+ putStrLn $ "thanks , press any key to exit, "++ who
+ getLine
+ syncCache
+ return ()
+ where
+ quserwho= quser who
+ aprobalList= do
+     empty <- isEmpty  (quserwho)
+     if empty
+         then   do
+            putStrLn  "No more document to validate. Bye"
 
-   hist <- getLine
-   withResource []   $ \ ms -> add hist  ms
-   let r=  refcache
---   Just l <- getResource ([] :: [String])
---   Just l2 <- atomically $ readDBRef ref
---   print  l
---   print l2
-   main
+            return ()
+         else do
+             rdoc <- pick  (quserwho)
 
+             approbal1 rdoc
+             aprobalList
+ approbal1 :: String -> IO ()
+ approbal1 doc= do
+       putStrLn $ "hi " ++ who ++", a new request for aprobal has arrived:"
 
-
-ref= getDBRef "index" :: DBRef [String]
-
-add h (Just stories)= h:stories
-add h Nothing =  [h]
-
-instance Indexable [String] where
-   key= const "index"
-
-instance Serializable [String] where
-   serialize= pack . show
-   deserialize= read . unpack
+       print doc
+       putStrLn $  "Would you approbe this document? s/n"
+       l <-    getLine
+       if l/= "s" && l /= "n" then approbal1 doc else do
+        let b= head l
+        let res= if b == 's' then  True else  False
+           -- send the message to the workflow
+        atomically $ do
+                popSTM   (quserwho)
+                pushSTM  (qdocApprobal   doc)  res

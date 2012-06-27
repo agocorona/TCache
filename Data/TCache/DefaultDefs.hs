@@ -1,11 +1,36 @@
-{-# LANGUAGE   ScopedTypeVariables, DeriveDataTypeable #-}
+-----------------------------------------------------------------------------
+--
+-- Module      :  Data.TCache.DefaultDefs
+-- Copyright   :
+-- License     :  BSD3
+--
+-- Maintainer  :  agocorona@gmail.com
+-- Stability   :
+-- Portability :
+--
+-- |
+--
+-----------------------------------------------------------------------------
+{- |
 
-module Data.TCache.Defs where
-import Data.Typeable
-import Control.Concurrent.STM(TVar)
+This module decouples the interface of 'IResource" class in two classes
+one for key extraction 'Indexable' and other ('Serializable" for serlalization and persistence
+.This last one defines persistence in files as default, but it can be changed
+to persistence in databases, for examople.
+
+-}
+{-# LANGUAGE   FlexibleInstances, UndecidableInstances
+               , MultiParamTypeClasses, FunctionalDependencies
+
+               , ExistentialQuantification
+               , ScopedTypeVariables
+
+                #-}
+module Data.TCache.DefaultDefs(Indexable(..),Serializable(..),defaultPersist,Persist(..)) where
+
 
 import Data.TCache.IResource
-
+import Data.Typeable
 import System.IO.Unsafe
 import Data.IORef
 import System.Directory
@@ -16,31 +41,31 @@ import Control.Exception as Exception
 import Control.Concurrent
 import Data.List(elemIndices,isInfixOf)
 import Data.Maybe(fromJust)
-
+import Data.TCache.Defs(castErr)
 import qualified Data.ByteString.Lazy.Char8 as B
 
-	
-
-	
-type AccessTime = Integer
-type ModifTime  = Integer
-
-
-data Status a= NotRead | DoNotExist | Exist a deriving Typeable
-
-data Elem a= Elem !a !AccessTime !ModifTime   deriving Typeable
-
-type TPVar a=   TVar (Status(Elem a))
-
-data DBRef a= DBRef !String  !(TPVar a)  deriving Typeable
+--import Debug.Trace
+--
+--a !> b = trace b a
 
 
 
-castErr a= r where
-  r= case cast a of
-      Nothing -> error $ "Type error: " ++ (show $ typeOf a) ++ " does not match "++ (show $ typeOf r)
-                          ++ "\nThis means that objects of these two types have the same key \nor the retrieved object type is not the stored one for the same key\n"
-      Just x  -> x
+{- | Indexable is an utility class used to derive instances of IResource
+
+Example:
+
+@data Person= Person{ pname :: String, cars :: [DBRef Car]} deriving (Show, Read, Typeable)
+data Car= Car{owner :: DBRef Person , cname:: String} deriving (Show, Read, Eq, Typeable)
+@
+
+Since Person and Car are instances of 'Read' ans 'Show', by defining the 'Indexable' instance
+will implicitly define the IResource instance for file persistence:
+
+@
+instance Indexable Person where  key Person{pname=n} = \"Person \" ++ n
+instance Indexable Car where key Car{cname= n} = \"Car \" ++ n
+@
+-}
 
 
 class Indexable a where
@@ -69,7 +94,7 @@ Read, Show,  instances are implicit instances of Serializable
 Since write and read to disk of to/from the cache must not be very often
 The performance of serialization is not critical.
 -}
-class Serializable a {-serialFormat-} {- | a -> serialFormat-} where
+class Serializable a {-serialFormat-} | a -> {-serialFormat-} where
   serialize   :: a -> B.ByteString --serialFormat
   deserialize :: {-serialFormat-} B.ByteString -> a
   setPersist :: a -> Persist
@@ -163,4 +188,8 @@ readFileStrict f = openFile f ReadMode >>= \ h -> readIt h `finally` hClose h
       let n= fromIntegral s
       str <- B.hGet h n -- replicateM n (B.hGetChar h) 
       return str
+
+
+
+
 
