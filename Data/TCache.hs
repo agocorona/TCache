@@ -393,10 +393,15 @@ getDBRef key=   unsafePerformIO $! getDBRef1 $! key where
   (cache,_) <-  readIORef refcache -- !> ("getDBRef "++ key)
   r <- H.lookup cache  key
   case r of
-   Just (CacheElem  _ w) -> do
+   Just (CacheElem  mdb w) -> do
      mr <-  deRefWeak w
      case mr of
-        Just dbref@(DBRef _  tv) -> return $! castErr dbref
+        Just dbref@(DBRef _ tv) ->
+                case mdb of
+                  Nothing -> return $! castErr dbref
+                  Just _  -> do
+                        H.update cache key (CacheElem Nothing w) --to notify when the DBREf leave its reference
+                        return $! castErr dbref
         Nothing -> finalize w >>  getDBRef1 key  -- the weak pointer has not executed his finalizer
 
    Nothing -> do
