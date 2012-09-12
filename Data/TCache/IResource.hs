@@ -15,7 +15,7 @@ import Control.Monad(when,replicateM)
 import Data.List(isInfixOf)
 
 
-{- | must be defined for every object to be cached.
+{- | Must be defined for every object to be cached.
 -}
 class IResource a where 
         {- The `keyResource string must be a unique  since this is used to index it in the hash table. 
@@ -37,29 +37,31 @@ class IResource a where
         -}
         keyResource :: a -> String             -- ^ must be defined
 
-        {- | 'readResourceByKey' implements the database access and marshalling or of the object.
+        {- | Implements the database access and marshalling of the object.
         while the database access must be strict, the marshaling must be lazy if, as is often the case,
         some parts of the object are not really accesed.
-        Moreover, if the object contains DBRefs, this avoids unnecesary cache lookups
-        this method is called inside 'atomically' blocks and thus may be interrupted without calling
+        If the object contains DBRefs, this avoids unnecesary cache lookups.
+        This method is called inside 'atomically' blocks.
         Since STM transactions retry, readResourceByKey may be called twice in strange situations. So it must be idempotent, not only in the result but also in the effect in the database
+        . However, because it is executed by 'safeIOToSTM' it is guaranteed that the execution is not interrupted.
         -}
         readResourceByKey :: String -> IO(Maybe a)
 
-        -- to permit accesses not by key. (it defaults as readResourceByKey)
+        -- To allow accesses not by key. (it defaults as @readResourceByKey $ keyResource x@)
         readResource :: a -> IO (Maybe a)
         readResource x = readResourceByKey $ keyResource x
 
-        -- | the write operation in persistent storage. It must be strict.  
-        -- Since STM transactions may retry, writeResource must be idempotent, not only in the result but also in the effect in the database
-        -- all the new obbects are writeen to the database on synchromization
-        -- so writeResource when using a database for persistence must not autocommit.
-        -- Commit code must be located in the postcondition. (see 'setConditions')
-        -- Since there is no provision for rollback from failure in writing fromIDyn
+        -- | To write into persistent storage. It must be strict.  
+        -- Since STM transactions may retry, @writeResource@ must be idempotent, not only in the result but also in the effect in the database.
+        -- . However, because it is executed by 'safeIOToSTM' it is guaranteed that the execution is not interrupted.
+        -- All the new obbects are writeen to the database on synchromization,
+        -- so writeResource must not autocommit.
+        -- Commit code must be located in the postcondition. (see  `setConditions`)
+        -- Since there is no provision for rollback from failure in writing to
         -- persistent storage, 'writeResource' must retry until success.
     	writeResource:: a-> IO()
 
-        -- | is called syncronously. It must autocommit   
+        -- | Delete the resource. It is called syncronously. So it must tocommit   
     	delResource:: a-> IO()
 
 

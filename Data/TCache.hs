@@ -2,30 +2,31 @@
     , FlexibleInstances, UndecidableInstances #-}
 
 {- | TCache is a transactional cache with configurable persitence that permits
-STM transactions with objects thar syncronize sincromous or asyncronously with
-their user defined storages. Default persistence in files is provided for testing purposes
+STM transactions with objects that syncronize sincromous or asyncronously with
+their user defined storages. Default persistence in files is provided by default
 
- TCache implements ''DBRef' 's . They are persistent STM references  with a traditional 'readDBRef', 'writeDBRef' Haskell interface.
+ TCache implements ''DBRef' 's . They are persistent STM references  with a typical Haskell interface.
 simitar to TVars ('newDBRef', 'readDBRef', 'writeDBRef' etc) but with added. persistence
-. DBRefs are serializable, so they can be stored and retrieved. See some examples below
+. DBRefs are serializable, so they can be stored and retrieved.
 Because they are references,they point to other serializable registers.
 This permits persistent mutable Inter-object relations
 
 For simple transactions of lists of objects of the same type TCache implements
-inversion of control primitives 'withSTMResources' and variants, that call pure user defined code for registers update.
-See examples below.
+inversion of control primitives 'withSTMResources' and variants, that call pure user defined code for registers update. Examples below.
 
-Triggers in "Data.TCache.Triggers" are user defined hooks that are called back on register updates. That can be used for:
-
+Triggers in "Data.TCache.Triggers" are user defined hooks that are called back on register updates.
+.They are used internally for indexing.
 
 "Data.TCache.IndexQuery" implements an straighforwards pure haskell type safe query language  based
  on register field relations. This module must be imported separately.
 
-"Data.TCache.IndexText" add full text search and content search to the qhery language
+"Data.TCache.IndexText" add full text search and content search to the query language
 
-"Data.TCache.DefaultPersistence" define instances for key definition, serialization
-and persistence, and default file persistence. The file persistence is now more reliable, and the embedded IO reads inside STM transactions are safe.
+"Data.TCache.DefaultPersistence" has instances for key indexation , serialization
+ and default file persistence. The file persistence is more reliable, and the embedded IO reads inside STM transactions are safe.
 
+"Data.Persistent.Collection" implements a persistent, transactional collection with Queue interface as well as
+ indexed access by key
 
 -}
 
@@ -42,21 +43,21 @@ module Data.TCache (
  ,safeIOToSTM
 
 -- * Operations with cached database references
-{-|  DBRefs are persistent cached database references in the STM monad
+{-|  @DBRefs@ are persistent cached database references in the STM monad
 with read/write primitives, so the traditional syntax of Haskell STM references
 can be used for  interfacing with databases. As expected, the DBRefs are transactional,
  because they operate in the STM monad.
 
-DBRefs are references to  cached database objects. A DBRef is associated with its referred object and its key
-Since DBRefs are serializable, they can be elements of mutable objects. They could point to other mutable objects
-and so on, so DBRefs can act as "hardwired" relations from mutable objects
+A @DBRef@ is associated with its referred object trough its key.
+Since DBRefs are serializable, they can be elements of mutable cached objects themselves. They could point to other mutable objects
+and so on, so DBRefs can act as \"hardwired\" relations from mutable objects
 to other mutable objects in the database/cache. their referred objects are loaded, saved and flused
 to and from the cache automatically depending on the cache handling policies and the access needs
 
 
-DBRefs are univocally identified by its pointed object keys, so they can be compared, ordered and so on.
-The creation of a DBRef, trough 'getDBRef' is pure. This permits an efficient lazy marshalling
-of registers with references, such are indexes when are queried for some fields but not others.
+@DBRefs@ are univocally identified by its pointed object keys, so they can be compared, ordered checked for equality so on.
+The creation of a DBRef, trough 'getDBRef' is pure. This permits an efficient lazy access to the
+ registers trouth their DBRefs by lazy marshalling of the register content on demand.
 
 Example: Car registers have references to Person regiters
 
@@ -119,10 +120,9 @@ now from the Car register it is possible to recover the owner's register
 
 DBRefs, once the pointed cached object is looked up in the cache and found at creation, they does
 not perform any further cache lookup afterwards, so reads and writes from/to DBRefs are faster
-than *Resource(s) calls, which perform lookups everytime
-in the cache
+than *Resource(s) calls, which perform  cache lookups everytime the object is accessed
 
-DBRef's and *Resource(s) primitives are completely interoperable. The latter operate implicitly with DBRef's
+DBRef's and @*Resource(s)@ primitives are completely interoperable. The latter operate implicitly with DBRef's
 
 -}
 
@@ -136,15 +136,16 @@ DBRef's and *Resource(s) primitives are completely interoperable. The latter ope
 ,writeDBRef
 ,delDBRef
 
--- * IResource class
+-- * @IResource@ class
 {- | cached objects must be instances of IResource.
 Such instances can be implicitly derived trough auxiliary clasess for file persistence
 -}
 ,IResource(..)
 
 -- * Operations with cached objects
-{- | Operations with DBRef's can be performed implicitly with the \"traditional\" TCache operations
-available in older versions.
+{- | implement inversion of control primitives where  the user defines the objects to retrive. The primitives
+then call a the defined function that, determines how to transform the objects retrieved,wich are sent
+back to the storage and a result is returned.
 
 In this example \"buy\" is a transaction where the user buy an item.
 The spent amount is increased and the stock of the product is decreased:
@@ -169,9 +170,9 @@ user `buy` item=  'withResources'[user,item] buyIt
     buyIt _ = error \"either the user or the item (or both) does not exist\"
 @
 -}
+,Resources(..)  -- data definition used to communicate object Inserts and Deletes to the cache
 ,resources      -- empty resources
 ,withSTMResources
-,Resources(..)  -- data definition used to communicate object Inserts and Deletes to the cache
 ,withResources
 ,withResource
 ,getResources
@@ -189,12 +190,12 @@ if the DBRef contains Nothing, then the object is being created
 
 Example:
 
-every time a car is added, or deleted, the owner's list is updated
-this is done by the user defined trigger addCar
+Every time a car is added, or deleted, the owner's list is updated.
+This is done by the user defined trigger addCar
 
 @
  addCar pcar (Just(Car powner _ )) = addToOwner powner pcar
- addCar pcar Nothing  = readDBRef pcar >>= \(Just car)-> deleteOwner (owner car) pcar
+ addCar pcar Nothing  = readDBRef pcar >>= \\(Just car)-> deleteOwner (owner car) pcar
 
  addToOwner powner pcar=do
     Just owner <- readDBRef powner
@@ -208,16 +209,14 @@ this is done by the user defined trigger addCar
     'addTrigger' addCar
     putStrLn \"create bruce's register with no cars\"
     bruce \<- 'atomically' 'newDBRef' $ Person \"Bruce\" []
-    putStrLn "add two car register with \"bruce\" as owner using the reference to the bruces register"
+    putStrLn \"add two car register with \\"bruce\\" as owner using the reference to the bruces register\"
     let newcars= [Car bruce \"Bat Mobile\" , Car bruce \"Porsche\"]
     insert newcars
     Just bruceData \<- atomically $ 'readDBRef' bruce
-    putStrLn "the trigger automatically updated the car references of the Bruce register"
+    putStrLn \"the trigger automatically updated the car references of the Bruce register\"
     print . length $ cars bruceData
     print bruceData
 @
-
-produces:
 
 gives:
 
@@ -235,7 +234,7 @@ gives:
 ,Cache
 ,setCache
 ,newCache
-,refcache
+--,refcache
 ,syncCache
 ,setConditions
 ,clearSyncCache
@@ -244,7 +243,8 @@ gives:
 ,SyncMode(..)
 ,clearSyncCacheProc
 ,defaultCheck
-
+-- * Other
+,onNothing
 )
 where
 
@@ -256,6 +256,7 @@ import Data.IORef
 import System.IO.Unsafe
 import System.IO(hPutStr, stderr)
 import Data.Maybe
+import Data.Char(isSpace)
 import Data.TCache.Defs
 import Data.TCache.IResource
 import Data.TCache.Triggers
@@ -283,23 +284,23 @@ type Ht = HashTable String  CacheElem
 type Cache = IORef (Ht , Integer)
 data CheckTPVarFlags= AddToHash | NoAddToHash
 
--- | set the cache. this is useful for hot loaded modules that will update an existing cache. Experimental
+-- | Set the cache. this is useful for hot loaded modules that will update an existing cache. Experimental
 setCache :: Cache -> IO()
 setCache ref = readIORef ref >>= \ch -> writeIORef refcache ch
 
--- the cache holder. stablished by default
+-- | The cache holder. stablished by default
 refcache :: Cache
 refcache =unsafePerformIO $ newCache >>= newIORef
 
--- | newCache  creates a new cache. Experimental
+-- |   Creates a new cache. Experimental
 newCache  :: IO (Ht , Integer)
 newCache =do
         c <- H.new (==) hashString
         return (c,0)
 
--- | return the  total number of DBRefs in the cache. For debug purposes
+-- | Return the  total number of DBRefs in the cache. For debug purposes.
 -- This does not count the number of objects in the cache since many of the DBRef
--- may not have the pointed object loaded. Itś O(n).
+-- may not have the pointed object loaded. It's O(n).
 numElems :: IO Int
 numElems= do
    (cache, _) <- readIORef refcache
@@ -317,11 +318,11 @@ deRefWeakSTM = unsafeIOToSTM . deRefWeak
 fixToCache :: (IResource a, Typeable a) => DBRef a -> IO ()
 fixToCache dbref@(DBRef k tv)= do
        (cache, _) <- readIORef refcache
-       w <- mkWeakPtr dbref Nothing -- $ Just $ fixToCache dbref
+       w <- mkWeakPtr dbref  $ Just $ fixToCache dbref
        H.update cache k (CacheElem (Just dbref) w)
        return()
 
--- | return the reference value. If it is not in the cache, it is fetched
+-- | Return the reference value. If it is not in the cache, it is fetched
 -- from the database.
 readDBRef :: (IResource a, Typeable a)  => DBRef a -> STM (Maybe a)
 readDBRef dbref@(DBRef key  tv)= do
@@ -341,7 +342,7 @@ readDBRef dbref@(DBRef key  tv)= do
            writeTVar tv $ Exist $ Elem  x t t
            return $ Just  x
 
--- | write in the reference a value
+-- | Write in the reference a value
 -- The new key must be the same than the old key of the previous object stored
 -- otherwise, an error "law of key conservation broken" will be raised
 --
@@ -361,13 +362,16 @@ writeDBRef dbref@(DBRef key  tv) x= x `seq` do
 
 
 instance  Show (DBRef a) where
-  show (DBRef  key _)=   "DBRef \""++ key ++ "\""
+  show (DBRef  key _)=   "getDBRef \""++ key ++ "\""
 
 instance  (IResource a, Typeable a) => Read (DBRef a) where
-    readsPrec n ('D':'B':'R':'e':'f':' ':'\"':str)=
-       let (key,nstr) =  break (== '\"') str
-       in  [( getDBRef key :: DBRef a, tail  nstr)]
-    readsPrec _ _ = []
+    readsPrec n str1= readit str
+       where
+       str = dropWhile isSpace str1
+       readit ('g':'e':'t':'D':'B':'R':'e':'f':' ':'\"':str1)=
+         let   (key,nstr) =  break (== '\"') str1
+         in  [( getDBRef key :: DBRef a, tail  nstr)]
+       readit  _ = []
 
 instance Eq (DBRef a) where
   DBRef k _ == DBRef k' _ =  k==k'
@@ -375,22 +379,22 @@ instance Eq (DBRef a) where
 instance Ord (DBRef a) where
   compare (DBRef k _)  (DBRef k' _) = compare k k'
 
--- | return the key of the object pointed to by the DBRef
+-- | Return the key of the object pointed to by the DBRef
 keyObjDBRef ::  DBRef a -> String
 keyObjDBRef (DBRef k _)= k
 
 
--- | get the reference to the object in the cache. if it does not exist, the reference is created empty.
+-- | Get the reference to the object in the cache. if it does not exist, the reference is created empty.
 -- Every execution of 'getDBRef' returns the same unique reference to this key,
 -- so it can be safely considered pure. This is a property useful because deserialization
--- of objects with unused embedded DBRef's  do not need to marshall them eagerly
+-- of objects with unused embedded DBRef's  do not need to marshall them eagerly.
 --  Tbis also avoid unnecesary cache lookups of the pointed objects.
 {-# NOINLINE getDBRef #-}
 getDBRef :: (Typeable a, IResource a) => String -> DBRef a
 getDBRef key=   unsafePerformIO $! getDBRef1 $! key where
  getDBRef1 :: (Typeable a, IResource a) =>  String -> IO (DBRef a)
- getDBRef1 key= do
-  (cache,_) <-  readIORef refcache -- !> ("getDBRef "++ key)
+ getDBRef1 key = do
+  (cache,_) <-  readIORef refcache   -- !> ("getDBRef "++ key)
   r <- H.lookup cache  key
   case r of
    Just (CacheElem  mdb w) -> do
@@ -398,14 +402,14 @@ getDBRef key=   unsafePerformIO $! getDBRef1 $! key where
      case mr of
         Just dbref@(DBRef _ tv) ->
                 case mdb of
-                  Nothing -> return $! castErr dbref
+                  Nothing -> return $! castErr dbref     -- !> "just"
                   Just _  -> do
                         H.update cache key (CacheElem Nothing w) --to notify when the DBREf leave its reference
                         return $! castErr dbref
-        Nothing -> finalize w >>  getDBRef1 key  -- the weak pointer has not executed his finalizer
+        Nothing -> finalize w >>  getDBRef1 key          -- !> "finalize"  -- the weak pointer has not executed his finalizer
 
    Nothing -> do
-     tv<- newTVarIO NotRead
+     tv<- newTVarIO NotRead                              -- !> "Nothing"
      dbref <- evaluate $ DBRef key  tv
      w <- mkWeakPtr  dbref . Just $ fixToCache dbref
      H.update cache key (CacheElem Nothing w)
@@ -461,7 +465,7 @@ newDBRefIO x= do
 -- If not, the reference is created with the new value.
 -- If you like to update in any case, use 'getDBRef' and 'writeDBRef' combined
 -- if you  need to create the reference and the reference content, use 'newDBRef'
-
+{-# NOINLINE newDBRef #-}
 newDBRef ::   (IResource a, Typeable a) => a -> STM  (DBRef a)
 newDBRef x = do
   let ref= getDBRef $! keyResource x
@@ -489,7 +493,7 @@ newDBRef x = do
 --        H.update cache key ( CacheElem Nothing w)
 --      return dbref
 
--- | delete the content of the DBRef form the cache and from permanent storage
+-- | Delete the content of the DBRef form the cache and from permanent storage
 delDBRef :: (IResource a, Typeable a) => DBRef a -> STM()
 delDBRef dbref@(DBRef k tv)= do
   mr <- readDBRef dbref
@@ -502,12 +506,23 @@ delDBRef dbref@(DBRef k tv)= do
 
    Nothing -> return ()
 
-    		
 
 
+-- | Handles Nothing cases in a simpler way than runMaybeT.
+-- it is used in infix notation. for example:
+--
+-- @result <- readDBRef ref \`onNothing\` error (\"Not found \"++ keyObjDBRef ref)@
+--
+-- or
+--
+-- @result <- readDBRef ref \`onNothing\` return someDefaultValue@
+onNothing io onerr= do
+  my <-  io
+  case my of
+   Just y -> return y
+   Nothing -> onerr
 
-
--- | deletes the pointed object from the cache, not the database (see 'delDBRef')
+-- | Deletes the pointed object from the cache, not the database (see 'delDBRef')
 -- useful for cache invalidation when the database is modified by other process
 flushDBRef ::  (IResource a, Typeable a) =>DBRef a -> STM()
 flushDBRef (DBRef _ tv)=   writeTVar  tv  NotRead
@@ -529,7 +544,7 @@ flushAll = do
 
 
 -- | This is the main function for the *Resource(s) calls. All the rest derive from it. The results are kept in the STM monad
--- so it can be part of a larger STM transaction involving other DBRefs
+-- so it can be part of a larger STM transaction involving other DBRefs.
 -- The 'Resources' register  returned by the user-defined function  is interpreted as such:
 --
 --  * 'toAdd':  the content of this field will be added/updated to the cache
@@ -539,7 +554,7 @@ flushAll = do
 --  * 'toReturn': the content of this field will be returned by 'withSTMResources'
 --
 -- WARNING: To catch evaluations errors at the right place, the values to be written must be fully evaluated.
--- .Errors in delayed evaluations at serialization time can cause inconsistencies in the database.
+-- Errors in delayed evaluations at serialization time can cause inconsistencies in the database.
 
 withSTMResources :: (IResource a, Typeable a)=> [a]        -- ^ the list of resources to be retrieved
                      -> ([Maybe a]-> Resources a x)   -- ^ The function that process the resources found and return a Resources structure
@@ -566,44 +581,42 @@ withSTMResources rs f=  do
   mreadDBRef Nothing    =  return Nothing
 
 
--- | update of a single object in the cache
+-- | Update of a single object in the cache
 --
 -- @withResource r f= 'withResources' [r] (\[mr]-> [f mr])@
-withResource:: (IResource  a, Typeable a)
-              => a                    -- ^ prototypes of the object to be retrieved for which keyResource can be derived
-              -> (Maybe a-> a)      -- ^ update function that return another full object
-              -> IO ()
+withResource:: (IResource  a, Typeable a)   => a  -> (Maybe a-> a)  -> IO ()
 withResource r f= withResources [r] (\[mr]-> [f mr])
 
 
--- |  to atomically add/modify many objects in the cache
-
+-- |  To atomically add/modify many objects in the cache
+--
 -- @ withResources rs f=  atomically $ 'withSTMResources' rs f1 >> return() where   f1 mrs= let as= f mrs in  Resources  as [] ()@
 withResources:: (IResource a,Typeable a)=> [a]-> ([Maybe a]-> [a])-> IO ()
 withResources rs f=  atomically $ withSTMResources rs f1 >> return() where
      f1 mrs= let as= f mrs in  Resources  as [] ()
 
--- | to read a resource from the cache.
-
+-- | To read a resource from the cache.
+--
 -- @getResource r= do{mr<- 'getResources' [r];return $! head mr}@
 getResource:: (IResource a, Typeable a)=>a-> IO (Maybe a)
 getResource r= do{mr<- getResources [r];return $! head mr}
 
---- | to read a list of resources from the cache if they exist
-
+-- | To read a list of resources from the cache if they exist
+--
 --  | @getResources rs= atomically $ 'withSTMResources' rs f1 where  f1 mrs= Resources  [] [] mrs@
 getResources:: (IResource a, Typeable a)=>[a]-> IO [Maybe a]
 getResources rs= atomically $ withSTMResources rs f1 where
   f1 mrs= Resources  [] [] mrs
 		
 
--- | delete the   resource from cache and from persistent storage.
+-- | Delete the   resource from cache and from persistent storage.
+--
 -- @ deleteResource r= 'deleteResources' [r] @
 deleteResource :: (IResource a, Typeable a) => a -> IO ()
 deleteResource r= deleteResources [r]
 
--- | delete the list of resources from cache and from persistent storage.
-
+-- | Delete the list of resources from cache and from persistent storage.
+--
 -- @  deleteResources rs= atomically $ 'withSTMResources' rs f1 where  f1 mrs = Resources  [] (catMaybes mrs) ()@
 deleteResources :: (IResource a, Typeable a) => [a] -> IO ()
 deleteResources rs= atomically $ withSTMResources rs f1 where
@@ -631,7 +644,7 @@ takeDBRef cache flags x =do
 
    where
    readToCache flags cache key= do
-       mr <- readResourceByKey key
+       mr <- readResource x
        case mr of
             Nothing -> return Nothing
             Just r2 -> do
@@ -712,8 +725,8 @@ updateListToHash hash kv= mapM (update1 hash) kv where
 
 
 
--- | Start the thread that periodically call 'clearSyncCache' to clean and writes on the persistent storage.
--- Otherwise, 'syncCache' must be invoked explicitly or no persistence will exist.
+-- | Start the thread that periodically call `clearSyncCache` to clean and writes on the persistent storage.
+-- Otherwise, 'syncCache' or `clearSyncCache` or `atomicallySync` must be invoked explicitly or no persistence will exist.
 -- Cache writes allways save a coherent state
 clearSyncCacheProc ::
          Int                          -- ^ number of seconds betwen checks. objects not written to disk are written
@@ -732,8 +745,8 @@ criticalSection mv f= bracket
   (putMVar mv)
   $ const $ f
 
--- | Force the atomic write of all cached objects modified since the last save into permanent storage
--- Cache writes allways save a coherent state
+-- | Force the atomic write of all cached objects modified since the last save into permanent storage.
+-- Cache writes allways save a coherent state. As allways, only the modified objects are written.
 syncCache ::  IO ()
 syncCache  = criticalSection saving $ do
       (cache,lastSync) <- readIORef refcache  --`debug` "syncCache"
@@ -744,20 +757,20 @@ syncCache  = criticalSection saving $ do
       writeIORef refcache (cache, t2)
 
 
-data SyncMode= Synchronous   -- ^ write state when `atomicallySync` is invoked
+data SyncMode= Synchronous   -- ^ sync state to permanent storage when `atomicallySync` is invoked
              | Asyncronous   
                   {frecuency  :: Int                     -- ^ number of seconds between saves when asyncronous
                   ,check      :: (Integer-> Integer-> Integer-> Bool)  -- ^ The user-defined check-for-cleanup-from-cache for each object. 'defaultCheck' is an example
                   ,cacheSize  :: Int                     -- ^ size of the cache when async
                   }
-             | SyncManual               -- ^ use Data.TCache.syncCache to write the state
+             | SyncManual               -- ^ use `syncCache` to write the state
 
 
 
 
 tvSyncWrite= unsafePerformIO $ newIORef  (Synchronous, Nothing)
 
--- | specify the cache synchronization policy with pernament storage
+-- | Specify the cache synchronization policy with permanent storage. See `SyncMode` for details
 -- 
 
 syncWrite::  SyncMode -> IO()
@@ -774,7 +787,8 @@ syncWrite mode= do
      modeWrite= writeIORef tvSyncWrite (mode, Nothing)
 
 
-
+-- | Perform a synchronization of the cache with permanent storage once executed the STM transaction
+-- when 'syncWrite' policy is `Synchronous`
 atomicallySync :: STM a -> IO a
 atomicallySync proc= atomically $ do
                         r <- proc
@@ -790,10 +804,11 @@ atomicallySync proc= atomically $ do
         _ -> return True
 
 
--- |Saves the unsaved elems of the cache
--- Cache writes allways save a coherent state
---  delete some elems of  the cache when the number of elems > sizeObjects.
---  The deletion depends on the check criteria. 'defaultCheck' is the one implemented
+-- |Saves the unsaved elems of the cache.
+-- Cache writes allways save a coherent state.
+--  Unlike `syncChace` this call deletes some elems of  the cache when the number of elems > @sizeObjects@.
+--  The deletion depends on the check criteria, expressed by the first parameter.
+--  'defaultCheck' is the one implemented to be passed by default. Look at it to understand the clearing criteria.
 clearSyncCache ::  (Integer -> Integer-> Integer-> Bool)-> Int -> IO ()
 clearSyncCache check sizeObjects= criticalSection saving $ do
       (cache,lastSync) <- readIORef refcache
@@ -828,7 +843,7 @@ clearSyncCache check sizeObjects= criticalSection saving $ do
 
 
 
--- | ths is a default cache clearance check. It forces to drop from the cache all the
+-- | This is a default cache clearance check. It forces to drop from the cache all the
 -- elems not accesed since half the time between now and the last sync
 -- if it returns True, the object will be discarded from the cache
 -- it is invoked when the cache size exceeds the number of objects configured
@@ -886,8 +901,8 @@ extract elems lastSave= filter1 [] [] (0:: Int)  elems
             _ -> filter1 sav tofilter (n+1) rest
 
 
--- | assures that the IO computation finalizes no matter if the STM transaction
--- is aborted-retried. The IO computation run in a different thread.
+-- | Assures that the IO computation finalizes no matter if the STM transaction
+-- is aborted or retried. The IO computation run in a different thread.
 -- The STM transaction wait until the completion of the IO procedure (or retry as usual)
 -- it can be retried if the embedding STM computation is retried
 -- so the IO computation must be idempotent.

@@ -76,7 +76,7 @@ fields in a registers are to be indexed, they must have different types.
 module Data.TCache.IndexQuery(index, RelationOps(..), indexOf, recordsWith, (.&&.), (.||.), Select(..)) where
 
 import Data.TCache
-import Data.TCache.DefaultPersistence
+import Data.TCache.Defs
 import Data.List
 import Data.Typeable
 import Control.Concurrent.STM
@@ -87,7 +87,21 @@ import qualified  Data.Map as M
 import System.IO.Unsafe
 import Data.ByteString.Lazy.Char8(pack, unpack)
 
+class (Read reg, Read a, Show reg, Show a
+      , IResource reg,Typeable reg
+      , Typeable a,Ord a)
+      => Queriable reg a
 
+instance (Read reg, Read a, Show reg, Show a
+      , IResource reg,Typeable reg
+      , Typeable a,Ord a)
+      => Queriable reg a
+
+instance  Queriable reg a => IResource (Index reg a) where
+  keyResource = key
+  writeResource =defWriteResource
+  readResourceByKey = defReadResourceByKey
+  delResource = defDelResource
 
 data Index reg a= Index (M.Map a [DBRef reg]) deriving (  Show, Typeable)
 
@@ -95,10 +109,8 @@ instance (IResource reg, Typeable reg,Read reg,Show reg, Show a, Read a, Ord a)
    => Read (Index reg a) where
   readsPrec n ('I':'n':'d':'e':'x':' ':str)
      = map (\(r,s) -> (Index r, s)) rs where rs= readsPrec n str
+  readsPrec _ s= error $ "indexQuery: can not read index: \""++s++"\""
 
-
-class (Read reg, Read a, Show reg, Show a, IResource reg,Typeable reg, Typeable a,Ord a) => Queriable reg a
-instance (Read reg, Read a, Show reg, Show a, IResource reg,Typeable reg, Typeable a,Ord a) => Queriable reg a
 
 instance (Queriable reg a) => Serializable (Index reg a)  where
   serialize= pack . show

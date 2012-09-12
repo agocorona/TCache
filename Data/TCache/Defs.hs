@@ -1,6 +1,9 @@
 {-# LANGUAGE   ScopedTypeVariables, DeriveDataTypeable #-}
 
-module Data.TCache.Defs where
+{- | some internal definitions. To use default persistence, use
+'Data.TCache.DefaultPersistence' instead -}
+
+module Data.TCache.Defs  where
 import Data.Typeable
 import Control.Concurrent.STM(TVar)
 
@@ -19,9 +22,9 @@ import Data.Maybe(fromJust)
 
 import qualified Data.ByteString.Lazy.Char8 as B
 
-	
+--import Debug.Trace
+--(!>) = flip trace
 
-	
 type AccessTime = Integer
 type ModifTime  = Integer
 
@@ -43,22 +46,33 @@ castErr a= r where
       Just x  -> x
 
 
+{- | Indexable is an utility class used to derive instances of IResource
+
+Example:
+
+@data Person= Person{ pname :: String, cars :: [DBRef Car]} deriving (Show, Read, Typeable)
+data Car= Car{owner :: DBRef Person , cname:: String} deriving (Show, Read, Eq, Typeable)
+@
+
+Since Person and Car are instances of 'Read' ans 'Show', by defining the 'Indexable' instance
+will implicitly define the IResource instance for file persistence:
+
+@
+instance Indexable Person where  key Person{pname=n} = \"Person \" ++ n
+instance Indexable Car where key Car{cname= n} = \"Car \" ++ n
+@
+-}
 class Indexable a where
     key:: a -> String
     defPath :: a -> String       -- ^ additional extension for default file paths.
-                                -- The default value is "data/".
-
                                 -- IMPORTANT:  defPath must depend on the datatype, not the value (must be constant). Default is "TCacheData/"
     defPath =  const "TCacheData/"
 
 --instance IResource a => Indexable a where
 --   key x= keyResource x
 
-{- | Serialize is an abstract serialization ionterface in order to define implicit instances of IResource.
-The deserialization must be as lazy as possible if deserialized objects contain DBRefs,
-lazy deserialization avoid unnecesary DBRef instantiations when they are not accessed,
-since DBRefs instantiations involve extra cache lookups
-For this reason serialization/deserialization is to/from ordinary Strings
+{- | Serialize is an alternative to the IResource class for defining persistence in TCache.
+The deserialization must be as lazy as possible.
 serialization/deserialization are not performance critical in TCache
 
 Read, Show,  instances are implicit instances of Serializable
@@ -66,13 +80,13 @@ Read, Show,  instances are implicit instances of Serializable
 >    serialize  = show
 >    deserialize= read
 
-Since write and read to disk of to/from the cache must not be very often
+Since write and read to disk of to/from the cache are not be very frequent
 The performance of serialization is not critical.
 -}
-class Serializable a {-serialFormat-} {- | a -> serialFormat-} where
-  serialize   :: a -> B.ByteString --serialFormat
-  deserialize :: {-serialFormat-} B.ByteString -> a
-  setPersist :: a -> Persist
+class Serializable a  where
+  serialize   :: a -> B.ByteString
+  deserialize :: B.ByteString -> a
+  setPersist :: a -> Persist         -- ^ `defaultPersist`if not overriden
   setPersist _= defaultPersist
 
 --instance (Show a, Read a)=> Serializable a where
@@ -83,10 +97,11 @@ class Serializable a {-serialFormat-} {- | a -> serialFormat-} where
 -- | a persist mechanism has to implement these three primitives
 -- 'defaultpersist' is the default file persistence
 data Persist = Persist{
-       readByKey   ::  (String -> IO(Maybe B.ByteString)) -- ^  read by key
-     , write       ::  (String -> B.ByteString -> IO())   -- ^  write
+       readByKey   ::  (String -> IO(Maybe B.ByteString)) -- ^  read by key. It must be strict
+     , write       ::  (String -> B.ByteString -> IO())   -- ^  write. It must be strict
      , delete      ::  (String -> IO())}       -- ^  delete
 
+-- | Implements default persistence of objects in files with their keys as filenames
 defaultPersist= Persist
     {readByKey= defaultReadByKey
     ,write= defaultWrite
@@ -112,14 +127,14 @@ defaultReadByKey k= iox   -- !> "defaultReadByKey"
       | isDoesNotExistError e = return Nothing
       | otherwise= if ("invalid" `isInfixOf` ioeGetErrorString e)
          then
-            error $  "readResource: " ++ show e ++ " defPath and/or keyResource are not suitable for a file path"
+            error $  "defaultReadByKey: " ++ show e ++ " defPath and/or keyResource are not suitable for a file path:\n"++ k++"\""
               
          else defaultReadByKey  k
 
 
 defaultWrite :: String-> B.ByteString -> IO()
 defaultWrite filename x= safeWrite filename  x
-safeWrite filename str= handle  handler  $ B.writeFile filename str  -- !> ("write "++filename)
+safeWrite filename str= handle  handler  $ B.writeFile filename str   -- !> ("write "++filename)
      where          
      handler e-- (e :: IOError)
        | isDoesNotExistError e=do 
@@ -129,7 +144,7 @@ safeWrite filename str= handle  handler  $ B.writeFile filename str  -- !> ("wri
 
        | otherwise= if ("invalid" `isInfixOf` ioeGetErrorString e)
              then
-                error  $ "writeResource: " ++ show e ++ " defPath and/or keyResource are not suitable for a file path"
+                error  $ "defaultWriteResource: " ++ show e ++ " defPath and/or keyResource are not suitable for a file path: "++ filename
              else do
                 hPutStrLn stderr $ "defaultWriteResource:  " ++ show e ++  " in file: " ++ filename ++ " retrying"
                 safeWrite filename str
@@ -153,6 +168,21 @@ defaultDelete filename =do
            defaultDelete filename
 
 
+defReadResourceByKey k= iox where
+    iox= do
+      let Persist f _ _ = setPersist  x
+      f  file >>= return . fmap  deserialize . castErr
+      where
+      file= defPath x ++ k
+      x= undefined `asTypeOf` (fromJust $ unsafePerformIO iox)
+
+defWriteResource s= do
+      let Persist _ f _ = setPersist  s
+      f (defPath s ++ key s) $ castErr $ serialize s
+
+defDelResource s= do
+      let Persist _ _ f = setPersist s
+      f $ defPath s ++ key s
 
 
 -- | Strict read from file, needed for default file persistence
