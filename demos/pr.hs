@@ -1,27 +1,26 @@
+{-# OPTIONS -XDeriveDataTypeable
+            #-}
 module Main where
-import Control.Workflow
+import Data.TCache
+import Data.Typeable
+import Data.TCache.DefaultPersistence
+import Data.ByteString.Lazy.Char8
 import Control.Concurrent(threadDelay)
 import System.IO (hFlush,stdout)
 
-printLine x= do
-   putStr (show x ++ " ")
-   hFlush stdout
-   threadDelay 100000
+data Ops= Plus | Times deriving (Read, Show, Typeable)
+
+instance Serializable Ops where
+  serialize= pack . show
+  deserialize= read . unpack
+
+instance Indexable Ops where
+ key _ = "ops"
+
+main= do
+   let ref = getDBRef $ keyResource Times
+   atomically $ writeDBRef ref Plus
+   syncCache
 
 
-mcount :: Int -> Workflow IO ()
-mcount n= do
-             if n==5
-              then return ()
-              else do
-                step $  printLine n
-                mcount (n+1)
-
-
-
-main=do
-  startWF  "count" 0  [("count",mcount)]
-  startWF  "count"  0  [("count",mcount)]
-  startWF  "count" 0   [("count",mcount)]
-  threadDelay 20000000
-  startWF  "count" 0   [("count",mcount)]
+   print ref

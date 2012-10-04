@@ -158,7 +158,7 @@ indext sel  convert dbref  mreg= f1 --  unsafeIOToSTM $! f
    t=  show t1 ++ show t2
    refIndex= getDBRef . key $ IndexText t u u u u where u= undefined
 
--- | return the DBRefs whose fields (usually of container type) contains the requested value.
+-- | return the DBRefs of the registers whose field (first parameter, usually a container) contains the requested value.
 containsElem :: (IResource a, Typeable a, Typeable b) => (a -> b)  -> String -> STM [DBRef a]
 containsElem  sel wstr = do
     let w= T.pack wstr

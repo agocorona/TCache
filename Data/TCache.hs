@@ -269,8 +269,8 @@ import System.Mem.Weak
 import Control.Concurrent.MVar
 import Control.Exception(catch, throw,evaluate)
 
---import Debug.Trace
---(!>) = flip trace
+import Debug.Trace
+(!>) = flip trace
 
 -- there are two references to the DBRef here
 -- The Maybe one keeps it alive until the cache releases it for *Resources
@@ -357,7 +357,8 @@ writeDBRef dbref@(DBRef key  tv) x= x `seq` do
    else do
     applyTriggers  [dbref] [Just x]
     t <- unsafeIOToSTM timeInteger
-    writeTVar tv $ Exist $ Elem x t t  --  !> ("writeDBRef "++ key)
+
+    writeTVar tv $! Exist $! Elem x t t
     return()
 
 
@@ -538,7 +539,7 @@ flushAll = do
  del cache ( _ , CacheElem _ w)= do
       mr <- unsafeIOToSTM $ deRefWeak w
       case mr of
-        Just (DBRef _  tv) ->  writeTVar tv DoNotExist
+        Just (DBRef _  tv) ->  writeTVar tv NotRead
         Nothing -> unsafeIOToSTM (finalize w)
 
 
@@ -736,7 +737,6 @@ clearSyncCacheProc ::
 clearSyncCacheProc  time check sizeObjects= forkIO  clear
  where
  clear =handle ( \ (e :: SomeException)-> hPutStr stderr (show e) >> clear ) $ do
-    	threadDelay (fromIntegral$ time * 1000000)
     	clearSyncCache   check sizeObjects   --`debug` "CLEAR"
     	clear
 
@@ -790,18 +790,18 @@ syncWrite mode= do
 -- | Perform a synchronization of the cache with permanent storage once executed the STM transaction
 -- when 'syncWrite' policy is `Synchronous`
 atomicallySync :: STM a -> IO a
-atomicallySync proc= atomically $ do
-                        r <- proc
-                        t <- transact
-                        if t then return r else retry
+atomicallySync proc=do
+   r <- atomically  proc
+   sync
+   return r
+
    where
-   transact= do
-       (savetype,_) <- unsafeIOToSTM $ readIORef tvSyncWrite
+   sync= do
+       (savetype,_) <- readIORef tvSyncWrite
        case  savetype of
         Synchronous -> do
-            safeIOToSTM syncCache
-            return True
-        _ -> return True
+            syncCache
+        _ -> return ()
 
 
 -- |Saves the unsaved elems of the cache.

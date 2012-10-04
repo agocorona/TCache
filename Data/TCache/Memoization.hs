@@ -15,7 +15,7 @@
             , ExistentialQuantification
             , FlexibleInstances
             , TypeSynonymInstances  #-}
-module Data.TCache.Memoization (cachedByKey,cachedp,addrStr,addrHash,Executable(..))
+module Data.TCache.Memoization (cachedByKey,cachedp,addrStr,Executable(..))
 
 where
 import Data.Typeable
@@ -27,27 +27,22 @@ import System.Time
 import Data.Maybe(fromJust)
 import Control.Monad.Trans
 import Control.Monad.Identity
-
+import Data.RefSerialize(addrHash,newContext)
 import Debug.Trace
 (!>)= flip trace
 
 data Cached a b= forall m.Executable m => Cached a (a -> m b) b Integer deriving Typeable
 
+context= unsafePerformIO newContext
 
-
-
--- | return a string identifier for any object
-addrStr :: MonadIO m => a -> m String
-addrStr x = addrHash x >>= return . show
-
--- | return a hash of an object
-addrHash :: MonadIO m => a -> m Int
-
-{-# NOINLINE addrHash #-}
-addrHash x=  liftIO $ do
-       st <- makeStableName $! x
-       return $ hashStableName st
-
+-- | given a string, return a key that can be used in Indexable instances
+--  Of non persistent objects, such are cached objects (it changes fron execution to execution)
+-- . It uses `addrHash`
+addrStr x= "addr" ++ show hash
+ where
+ hash = case unsafePerformIO $ addrHash context x of
+   Right x -> x
+   Left x  -> x
 
 -- | to execute a monad for the purpose of memoizing its result
 class Executable m where
@@ -63,7 +58,7 @@ instance MonadIO Identity where
   liftIO= Identity . unsafePerformIO
 
 instance  (Indexable a, Typeable a) => IResource (Cached a  b) where
-  keyResource ch@(Cached a  f _ _)= "cached"++key a -- ++ unsafePerformIO (addrStr f )  --`debug` ("k="++ show k)
+  keyResource ch@(Cached a  f _ _)= "cached"++key a  -- ++ unsafePerformIO (addrStr f )  --`debug` ("k="++ show k)
 
   writeResource _= return ()
   delResource _= return ()

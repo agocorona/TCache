@@ -1,5 +1,5 @@
 name: TCache
-version: 0.10.0.2
+version: 0.10.0.4
 cabal-version: >= 1.6
 build-type: Simple
 license: BSD3
@@ -7,8 +7,7 @@ license-file: LICENSE
 maintainer: agocorona@gmail.com
 synopsis: A Transactional cache with user-defined persistence
 description: TCache is a transactional cache with configurable persitence. It allows conventional
-             STM transactions for objects that syncronize  with
-             their user defined storages.
+             STM transactions for objects that syncronize  with their user-defined storages.
              State in memory and into permanent storage is transactionally coherent.
              .
              The package implements serializable STM references, access by key and by record field value, triggers,
@@ -17,6 +16,7 @@ description: TCache is a transactional cache with configurable persitence. It al
              This version add memoization and a persistent and transactional collection/queue
              .
              See "Data.TCache" for details
+
 
 category: Data, Database
 author: Alberto Gómez Corona

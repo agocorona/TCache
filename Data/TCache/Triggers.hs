@@ -32,10 +32,10 @@ Trriggers are called just before an object of the given type is created, modifie
 The DBRef to the object and the new value is passed to the trigger.
 The called trigger function has two parameters: the DBRef being accesed
 (which still contains the old value), and the new value.
-If the content of the DBRef is being deleted, the second parameter is 'Nothing'.
+If the DBRef is being deleted, the second parameter is 'Nothing'.
 if the DBRef contains Nothing, then the object is being created
 -}
-addTrigger :: (IResource a, Typeable a) =>     ((DBRef a) -> Maybe a -> STM()) -> IO()
+addTrigger :: (IResource a, Typeable a) => ((DBRef a) -> Maybe a -> STM()) -> IO()
 addTrigger   t= do
    map <-  readIORef cmtriggers
    writeIORef cmtriggers $
@@ -49,6 +49,7 @@ addTrigger   t= do
 
 mbToList mxs= case mxs of Nothing -> []; Just xs -> xs
 
+-- | internally called when a DBRef is modified/deleted/created
 applyTriggers:: (IResource a, Typeable a) => [DBRef a] -> [Maybe a] -> STM()
 applyTriggers  [] _ = return()
 applyTriggers  dbrfs mas = do
