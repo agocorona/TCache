@@ -16,7 +16,19 @@ A persistent, transactional collection with Queue interface as well as
  Uses default persistence. See "Data.TCache.DefaultPersistence"
 
 -}
-
+{-
+NOTES
+TODO:
+data.persistent collection
+ convertirlo en un tree
+     añadiendo elementos node  Node (refQueue a)
+ implementar un query language
+    by key
+    by attribute (addAttibute)
+    by class
+    xpath
+ implementar un btree sobre el
+-}
 module Data.Persistent.Collection (
 RefQueue(..), getQRef,
 pop,popSTM,pick, flush, flushSTM,

@@ -1,4 +1,4 @@
-{-# LANGUAGE   ScopedTypeVariables, DeriveDataTypeable #-}
+{-# LANGUAGE   TypeSynonymInstances, FlexibleInstances, ScopedTypeVariables, DeriveDataTypeable #-}
 
 {- | some internal definitions. To use default persistence, use
 'Data.TCache.DefaultPersistence' instead -}
@@ -42,7 +42,7 @@ data DBRef a= DBRef !String  !(TPVar a)  deriving Typeable
 castErr a= r where
   r= case cast a of
       Nothing -> error $ "Type error: " ++ (show $ typeOf a) ++ " does not match "++ (show $ typeOf r)
-                          ++ "\nThis means that objects of these two types have the same key \nor the retrieved object type is not the stored one for the same key\n"
+                          ++ "\nThis means that objects of these two types have the same key \nor the retrieved object type is not the previously stored one for the same key\n"
       Just x  -> x
 
 
@@ -70,6 +70,21 @@ class Indexable a where
 
 --instance IResource a => Indexable a where
 --   key x= keyResource x
+
+
+instance Indexable String where
+  key= id
+
+instance Indexable Int where
+  key= show
+
+instance Indexable Integer where
+  key= show
+
+
+instance Indexable () where
+  key _= "void"
+
 
 {- | Serialize is an alternative to the IResource class for defining persistence in TCache.
 The deserialization must be as lazy as possible.
@@ -168,17 +183,18 @@ defaultDelete filename =do
            defaultDelete filename
 
 
+
 defReadResourceByKey k= iox where
     iox= do
       let Persist f _ _ = setPersist  x
-      f  file >>= return . fmap  deserialize . castErr
+      f  file >>=  evaluate . fmap  deserialize
       where
       file= defPath x ++ k
       x= undefined `asTypeOf` (fromJust $ unsafePerformIO iox)
 
 defWriteResource s= do
       let Persist _ f _ = setPersist  s
-      f (defPath s ++ key s) $ castErr $ serialize s
+      f (defPath s ++ key s) $ serialize s
 
 defDelResource s= do
       let Persist _ _ f = setPersist s

@@ -11,11 +11,13 @@ it also can index the lists of elements in a field (with `indexList`)
 so that it is possible to ask for the registers that contains a given element
 in the given field (with `containsElem`)
 
-An example of full text search i before and after an update in the text field
+An example of full text search and element search in a list in combination
+using the `.&&.` operator defined in "indexQuery".
+before and after the update of the register
 
 
 @
-data Doc= Doc{title, body :: String} deriving (Read,Show, Typeable)
+data Doc= Doc{title :: String , authors :: [String], body :: String} deriving (Read,Show, Typeable)
 instance Indexable Doc where
   key Doc{title=t}= t
 
@@ -25,17 +27,31 @@ instance Serializable Doc  where
 
 main= do
   'indexText'  body T.pack
-  let doc= Doc{title=  "title", body=  \"hola que tal estamos\"}
+  'indexList' authors  (map T.pack)
+
+  let doc= Doc{title=  \"title\", authors=[\"john\",\"Lewis\"], body=  \"Hi, how are you\"}
   rdoc <- atomically $ newDBRef doc
-  r1 <- atomically $ select title $ body \`'contains'\` \"hola que tal\"
+
+  r0 <- atomically $ `select` title $ authors \``containsElem`\` \"Lewis\"
+  print r0
+
+  r1 <- atomically $ `select` title $ body \``contains`\` \"how are you\"
   print r1
 
-  atomically $ 'writeDBRef' rdoc  doc{ body=  "que tal"}
-  r <- atomically $ 'select' title $ body  \`'contains'\` \"hola que tal\"
-  print r
-  if  r1 == [title doc] then print \"OK\" else print \"FAIL\"
-  if  r== [] then print \"OK\" else print \"FAIL\"
+  r2 <- atomically $ `select` body $ body \``contains`\` \"how are you\" .&&. authors `containsElem` "john"
+  print r2
+
+  atomically $ writeDBRef rdoc  doc{ body=  \"what's up\"}
+
+  r3 <- atomically $ 'select' title $ body  \`'contains'\` \"how are you\"
+  print r3
+
+  if  r0== r1 && r1== [title doc] then print \"OK\" else print \"FAIL\"
+  if  r3== [] then print \"OK\" else print \"FAIL\"
 @
+
+
+
 -}
 
 module Data.TCache.IndexText(indexText, indexList,  contains, containsElem) where
@@ -45,7 +61,7 @@ import Data.TCache.Defs
 import qualified Data.Text.Lazy as T
 import Data.Typeable
 import qualified Data.Map as M
-import Data.Maybe (catMaybes)
+import Data.Maybe
 import Data.Bits
 import System.Mem.StableName
 import Data.List((\\))
@@ -54,7 +70,9 @@ import Control.Concurrent(forkIO)
 import Data.Char
 import Control.Concurrent(threadDelay)
 import Data.ByteString.Lazy.Char8(pack, unpack)
+import Control.Monad
 --import Debug.Trace
+--(!>)= flip trace
 
 data IndexText=  IndexText
         { fieldType :: !String
@@ -94,23 +112,28 @@ readInitDBRef v x= do
 add ref t key w = op ref t setBit w key
 del ref t key w = op ref t clearBit w key
 
-op refIndex t set w key =  do
- if T.length w <3
-  then return ()
-  else do
+op refIndex t set ws key =  do
    mindex <- readDBRef refIndex
+   let mindex'= process mindex  ws
+   writeDBRef refIndex $ fromJust mindex'
+
+ where
+ process mindex []= mindex
+ process mindex (w:ws)=
    case mindex of
-       Nothing -> writeDBRef refIndex $ IndexText t 0 (M.singleton key 0) (M.singleton  0 key) (M.singleton w 1)
+       Nothing ->  process (Just $ IndexText t 0 (M.singleton key 0) (M.singleton  0 key) (M.singleton w 1)) ws
        Just (IndexText t n mapSI mapIS map) -> do
-        let (docLocation,n', mapSI')= case M.lookup key mapSI  of
-               Nothing  -> let n'= n+1 in (n', n', M.insert key n' mapSI)  -- new Document
-               Just m -> (m,n, mapSI)         -- already indexed document
+        let (docLocation,n', mapSI',mapIS')= case M.lookup key mapSI  of
+               Nothing  -> let n'= n+1 in (n', n'
+                                          , M.insert key n' mapSI
+                                          , M.insert n' key mapIS)  -- new Document
+               Just m -> (m,n, mapSI,mapIS)         -- already indexed document
 
         case M.lookup w map of
          Nothing ->    --new word
-            writeDBRef refIndex $ IndexText t  n mapSI mapIS (M.insert w (set 0 docLocation) map)
+            process (Just $ IndexText t  n' mapSI' mapIS' (M.insert w (set 0 docLocation) map)) ws
          Just integer ->  -- word already indexed
-               writeDBRef refIndex $ IndexText t n mapSI mapIS $ M.insert w (set integer docLocation) map
+            process (Just $ IndexText t n' mapSI' mapIS' $ M.insert w (set integer docLocation) map) ws
 
 -- | start a trigger to index the contents of a register field
 indexText
@@ -137,8 +160,8 @@ indext sel  convert dbref  mreg= f1 --  unsafeIOToSTM $! f
   f1=  do
    moldreg <- readDBRef dbref
    case ( moldreg,  mreg) of
-      (Nothing, Just reg)    -> mapM_ (add refIndex t (keyResource reg))    .  convert $ sel reg
-      (Just oldreg, Nothing) -> mapM_ (del refIndex t (keyResource oldreg)) .  convert $ sel oldreg
+      (Nothing, Just reg)    -> add refIndex t (keyResource reg)    .  convert $ sel reg
+      (Just oldreg, Nothing) -> del refIndex t (keyResource oldreg) . convert $ sel oldreg
       (Just oldreg, Just reg) -> do
         st  <- unsafeIOToSTM $ makeStableName $ sel oldreg -- test if field
         st' <- unsafeIOToSTM $ makeStableName $ sel reg    -- has changed
@@ -150,8 +173,8 @@ indext sel  convert dbref  mreg= f1 --  unsafeIOToSTM $! f
             let wrds'= convert $ sel reg
             let new=  wrds' \\ wrds
             let old= wrds \\ wrds'
-            mapM (del refIndex t key) old
-            mapM (add refIndex t key) new
+            when(not $ null old) $ del refIndex t key old
+            when(not $ null new) $ add refIndex t key new
             return()
    where
    [t1,t2]=  typeRepArgs $! typeOf sel
@@ -177,7 +200,7 @@ containsElem  sel wstr = do
             let wordsr = catMaybes $ map (\n -> M.lookup n mmapIntString) $ catMaybes mns
             return $ map getDBRef wordsr
 
-words1= T.split (\c -> isSeparator c || c=='\n' || isPunctuation c )
+words1= filter ( (<) 2 . T.length) . T.split (\c -> isSeparator c || c=='\n' || isPunctuation c )
 
 -- | return the DBRefs whose fields include all the words of length three or more in the requested text contents
 contains

@@ -41,7 +41,7 @@ main =  do
    atomically $  mapM_ 'newDBRef' [Car bruce \"Bat Mobile\", Car bruce \"Porsche\"]
    r \<- atomically $ cname '.==.' \"Porsche\"
    print r
-   r \<- atomically $ 'select' (cname, owner) $  (owner '.==.' bruce) '.&&.' (cname '.>=.' \"Bat Mobile\")
+   r \<- atomically $ 'select' (cname, owner) $  owner '.==.' bruce '.&&.' cname '.>=.' \"Bat Mobile\"
    print r
 @
 
@@ -125,41 +125,6 @@ instance (Typeable reg, Typeable a) => Indexable (Index reg a) where
        [typeofreg, typeofa]= typeRepArgs $! typeOf map
 
 
-{-
-instance (IResource reg,Typeable reg, Ord a,Read reg, Read a, Show reg, Show a) => Serializable (Index reg a) where
-   serialize= show
-   deserialize= read
-
-instance  (Typeable reg, Typeable a, Read reg, Show reg
-           , Read a, Show a, Ord a, IResource reg)
-           => IResource (Index reg a) where
-  keyResource = key
-  writeResource s=do
-      mf <- readIORef persistIndex
-      case mf of Nothing ->  defaultWriteResource s ; Just (PersistIndex _ f _) ->   f $ serialize s
-
-  readResourceByKey s= do
-      mf <- readIORef persistIndex
-      case mf of Nothing ->  defaultReadResourceByKey s; Just (PersistIndex f _ _) ->   f s >>= return . fmap  deserialize
-
-  delResource s= do
-      mf <- readIORef persistIndex
-      case mf of Nothing ->  defaultDelResource s; Just (PersistIndex _ _ f) ->   f$ keyResource s
-
-
-data PersistIndex= PersistIndex{
-       readIndexByKey   ::  (String -> IO(Maybe String))
-     , writeIndex       ::  (String -> IO())
-     , deleteIndex      ::  (String -> IO())}
-
-setPersistIndex ::  PersistIndex -> IO ()
-setPersistIndex p = writeIORef persistIndex $ Just p
-
-
-persistIndex :: IORef (Maybe PersistIndex)
-persistIndex = unsafePerformIO $ newIORef Nothing
-
--}
 
 getIndex :: (Queriable reg a)
    => ( reg -> a) -> a -> STM(DBRef (Index reg a), Index reg a,[DBRef reg])
@@ -177,7 +142,7 @@ getIndexr rindex val= do
    let index = case mindex of Just (Index index) ->  index; _ -> M.empty
 
    let dbrefs= case M.lookup  val index of
-        Just  dbrefs ->  dbrefs
+        Just  dbrefs -> dbrefs
         Nothing      -> []
 
    return (rindex, Index index, dbrefs)
@@ -241,10 +206,10 @@ instance (Queriable reg a) => RelationOps (reg -> a) a  [DBRef reg] where
        return dbrefs
 
     (.>.)  field value= retrieve field value (>)
-    (.>=.) field value= retrieve field value (>=)
     (.<.)  field value= retrieve field value (<)
     (.<=.)  field value= retrieve field value (<=)
 
+    (.>=.) field value= retrieve field value (>=)
 
 join:: (Queriable rec v, Queriable rec' v)
        =>(v->v-> Bool) -> (rec -> v) -> (rec' -> v) -> STM[([DBRef rec], [DBRef rec'])]
@@ -270,6 +235,8 @@ instance (Queriable reg a ,Queriable reg' a ) =>RelationOps (reg -> a) (reg' -> 
     (.<=.)= join (<=)
     (.<.) = join (<)
 
+infixr 5 .==., .>., .>=., .<=., .<.
+
 class SetOperations set set'  setResult | set set' -> setResult where
   (.||.) :: STM set -> STM set' -> STM setResult
   (.&&.) :: STM set -> STM set' -> STM setResult
@@ -286,6 +253,8 @@ instance SetOperations  [DBRef a] [DBRef a] [DBRef a] where
      ys <- fys
      return $ union xs ys
 
+infixr 4 .&&.
+infixr 3 .||.
 
 instance SetOperations  (JoinData a a') [DBRef a] (JoinData a a') where
     (.&&.) fxs fys= do

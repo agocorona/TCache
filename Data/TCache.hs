@@ -230,6 +230,8 @@ gives:
 
 -- * Cache control
 ,flushDBRef
+,flushKey
+,invalidateKey
 ,flushAll
 ,Cache
 ,setCache
@@ -260,7 +262,7 @@ import Data.Char(isSpace)
 import Data.TCache.Defs
 import Data.TCache.IResource
 import Data.TCache.Triggers
-import Control.Exception(handle,assert, bracket, SomeException)
+import Control.Exception
 import Data.Typeable
 import System.Time
 import System.Mem
@@ -269,8 +271,8 @@ import System.Mem.Weak
 import Control.Concurrent.MVar
 import Control.Exception(catch, throw,evaluate)
 
-import Debug.Trace
-(!>) = flip trace
+--import Debug.Trace
+--(!>) = flip trace
 
 -- there are two references to the DBRef here
 -- The Maybe one keeps it alive until the cache releases it for *Resources
@@ -528,6 +530,30 @@ onNothing io onerr= do
 flushDBRef ::  (IResource a, Typeable a) =>DBRef a -> STM()
 flushDBRef (DBRef _ tv)=   writeTVar  tv  NotRead
 
+-- flush the element with the given key
+flushKey key=  do
+   (cache,time) <- unsafeIOToSTM $ readIORef refcache
+   c <- unsafeIOToSTM $ H.lookup cache key
+   case c of
+       Just  (CacheElem _ w) -> do
+          mr <- unsafeIOToSTM $ deRefWeak w
+          case mr of
+            Just (DBRef k tv) -> writeTVar  tv  NotRead
+            Nothing -> unsafeIOToSTM (finalize w)  >> flushKey key
+       Nothing   -> return ()
+
+-- label the object as not existent in database
+invalidateKey key=  do
+   (cache,time) <- unsafeIOToSTM $ readIORef refcache
+   c <- unsafeIOToSTM $ H.lookup cache key
+   case c of
+       Just  (CacheElem _ w) -> do
+          mr <- unsafeIOToSTM $ deRefWeak w
+          case mr of
+            Just (DBRef k tv) -> writeTVar  tv  DoNotExist
+            Nothing -> unsafeIOToSTM (finalize w)  >> flushKey key
+       Nothing   -> return ()
+
 
 -- | drops the entire cache.
 flushAll :: STM ()
@@ -585,6 +611,7 @@ withSTMResources rs f=  do
 -- | Update of a single object in the cache
 --
 -- @withResource r f= 'withResources' [r] (\[mr]-> [f mr])@
+{-# INLINE withResource #-}
 withResource:: (IResource  a, Typeable a)   => a  -> (Maybe a-> a)  -> IO ()
 withResource r f= withResources [r] (\[mr]-> [f mr])
 
@@ -592,6 +619,7 @@ withResource r f= withResources [r] (\[mr]-> [f mr])
 -- |  To atomically add/modify many objects in the cache
 --
 -- @ withResources rs f=  atomically $ 'withSTMResources' rs f1 >> return() where   f1 mrs= let as= f mrs in  Resources  as [] ()@
+{-# INLINE withResources #-}
 withResources:: (IResource a,Typeable a)=> [a]-> ([Maybe a]-> [a])-> IO ()
 withResources rs f=  atomically $ withSTMResources rs f1 >> return() where
      f1 mrs= let as= f mrs in  Resources  as [] ()
@@ -599,12 +627,14 @@ withResources rs f=  atomically $ withSTMResources rs f1 >> return() where
 -- | To read a resource from the cache.
 --
 -- @getResource r= do{mr<- 'getResources' [r];return $! head mr}@
+{-# INLINE getResource #-}
 getResource:: (IResource a, Typeable a)=>a-> IO (Maybe a)
 getResource r= do{mr<- getResources [r];return $! head mr}
 
 -- | To read a list of resources from the cache if they exist
 --
 --  | @getResources rs= atomically $ 'withSTMResources' rs f1 where  f1 mrs= Resources  [] [] mrs@
+{-# INLINE getResources #-}
 getResources:: (IResource a, Typeable a)=>[a]-> IO [Maybe a]
 getResources rs= atomically $ withSTMResources rs f1 where
   f1 mrs= Resources  [] [] mrs
@@ -613,17 +643,19 @@ getResources rs= atomically $ withSTMResources rs f1 where
 -- | Delete the   resource from cache and from persistent storage.
 --
 -- @ deleteResource r= 'deleteResources' [r] @
+{-# INLINE deleteResource #-}
 deleteResource :: (IResource a, Typeable a) => a -> IO ()
 deleteResource r= deleteResources [r]
 
 -- | Delete the list of resources from cache and from persistent storage.
 --
 -- @  deleteResources rs= atomically $ 'withSTMResources' rs f1 where  f1 mrs = Resources  [] (catMaybes mrs) ()@
+{-# INLINE deleteResources #-}
 deleteResources :: (IResource a, Typeable a) => [a] -> IO ()
 deleteResources rs= atomically $ withSTMResources rs f1 where
    f1 mrs = resources {toDelete=catMaybes mrs}
 
-
+{-# INLINE takeDBRefs #-}
 takeDBRefs :: (IResource a, Typeable a) => [a] -> Ht  -> CheckTPVarFlags -> STM [Maybe (DBRef a)]
 takeDBRefs rs cache addToHash=  mapM (takeDBRef cache addToHash)  rs
 
@@ -631,7 +663,6 @@ takeDBRefs rs cache addToHash=  mapM (takeDBRef cache addToHash)  rs
 {-# NOINLINE takeDBRef #-}
 takeDBRef :: (IResource a, Typeable a) =>  Ht  -> CheckTPVarFlags -> a -> STM(Maybe (DBRef a))
 takeDBRef cache flags x =do
-
    let  keyr= keyResource x
    c <- unsafeIOToSTM $ H.lookup cache keyr
    case c of
@@ -667,7 +698,7 @@ timeInteger= do TOD t _ <- getClockTime
 
 
 
-	
+
 
 releaseTPVars :: (IResource a,Typeable a)=> [a] -> Ht  -> STM ()
 releaseTPVars rs cache = mapM_  (releaseTPVar cache)  rs
@@ -903,16 +934,17 @@ extract elems lastSave= filter1 [] [] (0:: Int)  elems
 
 -- | Assures that the IO computation finalizes no matter if the STM transaction
 -- is aborted or retried. The IO computation run in a different thread.
--- The STM transaction wait until the completion of the IO procedure (or retry as usual)
--- it can be retried if the embedding STM computation is retried
+-- The STM transaction wait until the completion of the IO procedure (or retry as usual).
+--
+-- It can be retried if the embedding STM computation is retried
 -- so the IO computation must be idempotent.
 -- Exceptions are bubbled up to the STM transaction
 safeIOToSTM :: IO a -> STM a
 safeIOToSTM req= unsafeIOToSTM  $ do
   tv   <- newEmptyMVar
-  forkIO $ (req >>= putMVar  tv . Right)
+  forkIO $ (req  >>= putMVar  tv . Right)
           `Control.Exception.catch`
-          (\(e :: SomeException) -> putMVar tv (Left e))
+          (\(e :: SomeException) -> putMVar tv $ Left e )
   r <- takeMVar tv
   case r of
    Right x -> return x

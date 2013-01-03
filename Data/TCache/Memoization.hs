@@ -15,7 +15,7 @@
             , ExistentialQuantification
             , FlexibleInstances
             , TypeSynonymInstances  #-}
-module Data.TCache.Memoization (cachedByKey,cachedp,addrStr,Executable(..))
+module Data.TCache.Memoization (cachedByKey,flushCached,cachedp,addrStr,Executable(..))
 
 where
 import Data.Typeable
@@ -28,8 +28,8 @@ import Data.Maybe(fromJust)
 import Control.Monad.Trans
 import Control.Monad.Identity
 import Data.RefSerialize(addrHash,newContext)
-import Debug.Trace
-(!>)= flip trace
+--import Debug.Trace
+--(!>)= flip trace
 
 data Cached a b= forall m.Executable m => Cached a (a -> m b) b Integer deriving Typeable
 
@@ -55,39 +55,53 @@ instance Executable Identity where
   execute (Identity x)= x
 
 instance MonadIO Identity where
-  liftIO= Identity . unsafePerformIO
+  liftIO f=  Identity $!  unsafePerformIO $! f
 
-instance  (Indexable a, Typeable a) => IResource (Cached a  b) where
-  keyResource ch@(Cached a  f _ _)= "cached"++key a  -- ++ unsafePerformIO (addrStr f )  --`debug` ("k="++ show k)
+cachedKeyPrefix = "cached"
+
+instance  (Indexable a) => IResource (Cached a  b) where
+  keyResource ch@(Cached a  f _ _)= cachedKeyPrefix ++ key a   -- ++ unsafePerformIO (addrStr f )
 
   writeResource _= return ()
   delResource _= return ()
-  readResourceByKey= error "access By Indexable is undefined for chached objects"
+  readResourceByKey=   error "access By Indexable is undefined for cached objects"
+
 
   readResource (Cached a f _ _)=do
    TOD tnow _ <- getClockTime
    let b = execute $ f a
-   return . Just $ Cached a f b tnow
+   return . Just $ Cached a f b tnow  -- !> "readRe"
 
-instance Indexable String where
-   key= id
+--cache time f a=  do
+--   TOD tnow _ <- getClockTime
+--   let b = execute $ f a
+--   withResources [] . const $ [Cached a f b tnow]     -- !> "writeRe"]
+--
+--cacheKey key time f= cache time (const  f) key
 
 -- | memoize the result of a computation for a certain time. This is useful for  caching  costly data
 -- such  web pages composed on the fly.
 --
 -- time == 0 means infinite
-cached ::  (Indexable a, Typeable a, Typeable b, Executable m,MonadIO m) => Int -> (a -> m b) -> a  -> m b
+cached ::  (Indexable a,Typeable a,  Typeable b, Executable m,MonadIO m) => Int -> (a -> m b) -> a  -> m b
 cached time  f a=  do
-   cho@(Cached _ _ b t)  <- liftIO $ getResource ( (Cached a f undefined undefined )) >>= return . fromJust
+   let prot= Cached a f undefined undefined
+   cho@(Cached _ _ b t)  <- liftIO $ getResource prot `onNothing` fillIt prot
    case time of
      0 -> return b
      _ -> do
            TOD tnow _ <- liftIO $ getClockTime
-           if time /=0 && tnow - t > fromIntegral time
+           if tnow - t > fromIntegral time
                       then do
                           liftIO $ deleteResource cho
                           cached time f a
                       else  return b
+   where
+   -- has been invalidated by flushCached
+   fillIt proto= do
+   r <- return . fromJust =<< (readResource proto)   -- !> "fillIt"
+   withResources [] $ const [r]
+   return r
 
 -- | Memoize the result of a computation for a certain time. A string 'key' is used to index the result
 --
@@ -96,6 +110,9 @@ cached time  f a=  do
 cachedByKey :: (Typeable a, Executable m,MonadIO m) => String -> Int ->  m a -> m a
 cachedByKey key time  f = cached  time (\_ -> f) key
 
+-- Flush the cached object indexed by the key
+flushCached :: String -> IO ()
+flushCached k= atomically $ invalidateKey $ cachedKeyPrefix ++ k           -- !> "flushCached"
 
 -- | a pure version of cached
 cachedp :: (Indexable a,Typeable a,Typeable b) => (a ->b) -> a -> b

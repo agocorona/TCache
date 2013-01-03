@@ -1,5 +1,5 @@
 name: TCache
-version: 0.10.0.4
+version: 0.10.0.5
 cabal-version: >= 1.6
 build-type: Simple
 license: BSD3
@@ -16,6 +16,8 @@ description: TCache is a transactional cache with configurable persitence. It al
              This version add memoization and a persistent and transactional collection/queue
              .
              See "Data.TCache" for details
+
+             This release fixes some bugs in the module IndexText
 
 
 category: Data, Database
@@ -41,6 +43,7 @@ library
                      Data.TCache.Defs Data.TCache.IResource Data.TCache.IndexQuery
                      Data.TCache.IndexText Data.TCache.Memoization Data.TCache.Triggers
                      Data.Persistent.Collection
+                     Data.Persistent.IDynamic
     exposed: True
     buildable: True
     extensions: OverlappingInstances UndecidableInstances
