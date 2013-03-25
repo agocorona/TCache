@@ -365,13 +365,13 @@ writeDBRef dbref@(DBRef key  tv) x= x `seq` do
 
 
 instance  Show (DBRef a) where
-  show (DBRef  key _)=   "getDBRef \""++ key ++ "\""
+  show (DBRef  key _)=   "DBRef \""++ key ++ "\""
 
 instance  (IResource a, Typeable a) => Read (DBRef a) where
     readsPrec n str1= readit str
        where
        str = dropWhile isSpace str1
-       readit ('g':'e':'t':'D':'B':'R':'e':'f':' ':'\"':str1)=
+       readit ('D':'B':'R':'e':'f':' ':'\"':str1)=
          let   (key,nstr) =  break (== '\"') str1
          in  [( getDBRef key :: DBRef a, tail  nstr)]
        readit  _ = []

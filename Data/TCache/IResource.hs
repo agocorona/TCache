@@ -6,7 +6,6 @@ import Data.Typeable
 import System.IO.Unsafe
 import Control.Concurrent.STM
 import Control.Concurrent
-import System.Directory
 import Control.Exception as Exception
 import System.IO
 import System.IO.Error

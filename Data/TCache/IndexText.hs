@@ -95,7 +95,7 @@ instance Serializable IndexText  where
   deserialize= read . unpack
 
 instance  Indexable IndexText  where
-   key (IndexText v _ _ _ _)=    "IndexText " ++ v
+   key (IndexText v _ _ _ _)=    "indextext " ++ v
 
 instance IResource IndexText where
   keyResource = key

@@ -15,7 +15,7 @@
             , ExistentialQuantification
             , FlexibleInstances
             , TypeSynonymInstances  #-}
-module Data.TCache.Memoization (cachedByKey,flushCached,cachedp,addrStr,Executable(..))
+module Data.TCache.Memoization (writeCached,cachedByKey,flushCached,cachedp,addrStr,Executable(..))
 
 where
 import Data.Typeable
@@ -60,11 +60,11 @@ instance MonadIO Identity where
 cachedKeyPrefix = "cached"
 
 instance  (Indexable a) => IResource (Cached a  b) where
-  keyResource ch@(Cached a  f _ _)= cachedKeyPrefix ++ key a   -- ++ unsafePerformIO (addrStr f )
+  keyResource ch@(Cached a  _ _ _)= cachedKeyPrefix ++ key a   -- ++ unsafePerformIO (addrStr f )
 
   writeResource _= return ()
   delResource _= return ()
-  readResourceByKey=   error "access By Indexable is undefined for cached objects"
+  readResourceByKey k=   error $ "access By key is undefined for cached objects.key= " ++ k
 
 
   readResource (Cached a f _ _)=do
@@ -83,6 +83,17 @@ instance  (Indexable a) => IResource (Cached a  b) where
 -- such  web pages composed on the fly.
 --
 -- time == 0 means infinite
+
+--getCachedRef :: (Indexable a,Typeable a, Typeable b) => a -> DBRef (Cached a b)
+--getCachedRef x = getDBRef $ keyResource (Cached x (u u u) where u= undefined
+
+writeCached
+  :: (Typeable b, Typeable a, Indexable a, Executable m) =>
+     a -> (a -> m b) -> b -> Integer -> STM ()
+writeCached  a b c d=
+    withSTMResources [] . const $ resources{toAdd= [Cached a b c d] }
+
+
 cached ::  (Indexable a,Typeable a,  Typeable b, Executable m,MonadIO m) => Int -> (a -> m b) -> a  -> m b
 cached time  f a=  do
    let prot= Cached a f undefined undefined

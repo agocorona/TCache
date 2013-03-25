@@ -117,7 +117,7 @@ instance (Queriable reg a) => Serializable (Index reg a)  where
   deserialize= read . unpack
 
 
-keyIndex treg tv= "Index " ++ show treg ++ show tv
+keyIndex treg tv= "index " ++ show treg ++ show tv
 
 instance (Typeable reg, Typeable a) => Indexable (Index reg a) where
    key map= keyIndex typeofreg typeofa

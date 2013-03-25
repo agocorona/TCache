@@ -120,27 +120,32 @@ toIDyn x= IDyn . unsafePerformIO . newIORef $ DRight x
 fromIDyn :: (Typeable a , Serialize a)=> IDynamic -> a
 fromIDyn x=r where
   r = case safeFromIDyn x of
-          Nothing -> error $ "fromIDyn: casting failure for data "
-                     ++ show x ++ " to type: "
-                     ++ (show $ typeOf r)
-          Just v -> v
+          Left s -> error s
+          Right v -> v
 
 
-safeFromIDyn :: (Typeable a, Serialize a) => IDynamic -> Maybe a       
-safeFromIDyn (IDyn r)=unsafePerformIO $ do
+safeFromIDyn :: (Typeable a, Serialize a) => IDynamic -> Either String a       
+safeFromIDyn (d@(IDyn r))= final where
+ final= unsafePerformIO $ do
   t<-  readIORef r
   case t of
-   DRight x ->  return $ cast x
+   DRight x ->  return $ case cast x of
+        Nothing -> Left $ "fromIDyn: unable to extract from "
+                     ++ show d ++ " something of type: "
+                     ++ (show . typeOf $ fromRight final)
+        Just x  -> Right x
+        where
+        fromRight (Right x)= x
+
 
    DLeft (str, c) ->
-    handle (\(e :: SomeException) ->  return Nothing) $  -- !> ("safeFromIDyn : "++ show e)) $
+    handle (\(e :: SomeException) ->  return $ Left (show e)) $  -- !> ("safeFromIDyn : "++ show e)) $
         do
           let v= runRC  c rreadp str -- !> unpack str
           writeIORef r $! DRight v -- !> ("***reified "++ unpack str)
-          return $! Just v -- !>  ("*** end reified " ++ unpack str)
+          return $! Right v -- !>  ("*** end reified " ++ unpack str)
 
 
---main= print (safeFromIDyn $ IDyn $ unsafePerformIO $ newIORef $ DLeft $ (pack "1", (unsafePerformIO $ HT.new (==) HT.hashInt, pack "")) :: Maybe Int)
 
 reifyM :: (Typeable a,Serialize a) => IDynamic -> a -> IO a
 reifyM dyn v = do

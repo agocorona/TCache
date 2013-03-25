@@ -65,8 +65,8 @@ instance Indexable Car where key Car{cname= n} = \"Car \" ++ n
 class Indexable a where
     key:: a -> String
     defPath :: a -> String       -- ^ additional extension for default file paths.
-                                -- IMPORTANT:  defPath must depend on the datatype, not the value (must be constant). Default is "TCacheData/"
-    defPath =  const "TCacheData/"
+                                -- IMPORTANT:  defPath must depend on the datatype, not the value (must be constant). Default is ".tcachedata/"
+    defPath =  const ".tcachedata/"
 
 --instance IResource a => Indexable a where
 --   key x= keyResource x

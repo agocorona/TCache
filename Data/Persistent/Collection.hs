@@ -34,7 +34,7 @@ RefQueue(..), getQRef,
 pop,popSTM,pick, flush, flushSTM,
 pickAll, pickAllSTM, push,pushSTM,
 pickElem, pickElemSTM,  readAll, readAllSTM,
-deleteElem, deleteElemSTM,
+deleteElem, deleteElemSTM,updateElem,updateElemSTM,
 unreadSTM,isEmpty,isEmptySTM
 ) where
 import Data.Typeable
@@ -89,6 +89,7 @@ instance   Serialize a => Serializable (Queue a ) where
 -- | A queue reference
 type RefQueue a= DBRef (Queue a)
 
+-- | push an element at the top of the queue
 unreadSTM :: (Typeable a, Serialize a) => RefQueue a -> a -> STM ()
 unreadSTM queue x= do
     r <- readQRef queue
