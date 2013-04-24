@@ -54,7 +54,7 @@ main= do
 
 -}
 
-module Data.TCache.IndexText(indexText, indexList,  contains, containsElem) where
+module Data.TCache.IndexText(indexText, indexList,  contains, containsElem, allElemsOf) where
 import Data.TCache
 import Data.TCache.IndexQuery
 import Data.TCache.Defs
@@ -141,7 +141,7 @@ indexText
      => (a -> b)      -- ^ field to index
      -> (b -> T.Text) -- ^ method to convert the field content to lazy Text (for example `pack` in case of String fields). This permits to index non Textual fields
      -> IO ()
-indexText sel convert= addTrigger (indext sel  (words1 . convert)) where
+indexText sel convert= addTrigger (indext sel  (words1 . convert))
 
 -- | trigger the indexation of list fields with elements convertible to Text
 indexList
@@ -149,7 +149,7 @@ indexList
      => (a -> b)      -- ^ field to index
      -> (b -> [T.Text]) -- ^ method to convert a field element to Text (for example `pack . show` in case of elemets with Show instances)
      -> IO ()
-indexList sel convert= addTrigger (indext sel  convert) where
+indexList sel convert= addTrigger (indext sel  convert)
 
 
 indext :: (IResource a, Typeable a,Typeable b)
@@ -200,9 +200,21 @@ containsElem  sel wstr = do
             let wordsr = catMaybes $ map (\n -> M.lookup n mmapIntString) $ catMaybes mns
             return $ map getDBRef wordsr
 
-words1= filter ( (<) 2 . T.length) . T.split (\c -> isSeparator c || c=='\n' || isPunctuation c )
+allElemsOf :: (IResource a, Typeable a, Typeable b) => (a -> b) -> STM [T.Text]
+allElemsOf  sel  = do
+    let [t1, t2]=  typeRepArgs $! typeOf sel
+    let t=  show t1 ++ show t2
+    let u= undefined
+    mr <- withSTMResources [IndexText t u u u u]
+       $ \[r] -> resources{toReturn= r}
+    case mr of
+      Nothing -> return []
+      Just (IndexText t n _ _ map) -> return $ M.keys map
 
--- | return the DBRefs whose fields include all the words of length three or more in the requested text contents
+words1= filter filterWordt {-( (<) 2 . T.length)-} . T.split (\c -> isSeparator c || c=='\n' || isPunctuation c )
+
+-- | return the DBRefs whose fields include all the words in the requested text contents.Except the
+-- words  with less than three characters that are not digits or uppercase, that are filtered out before making the query
 contains
   :: (IResource a, Typeable a, Typeable b)
   =>( a -> b)      -- ^ field to search in
@@ -212,8 +224,8 @@ contains sel str= case  words str of
      [] -> return []
      [w] -> containsElem sel w
      ws  -> do
-        let rs = map (containsElem sel) $ filter (\t -> length t >2) ws
+        let rs = map (containsElem sel) $ filter filterWord ws
         foldl (.&&.) (head rs)  (tail rs)
 
-
-
+filterWordt w= T.length w >2 || or (map (\c -> isUpper c || isDigit c) (T.unpack w))
+filterWord w= length w >2 || or (map (\c -> isUpper c || isDigit c) w)

@@ -229,6 +229,49 @@ gives:
 ,addTrigger
 
 -- * Cache control
+{-- |
+
+The mechanism for dropping elements from the cache is too lazy. `flushDBRef`, for example
+just delete the data element  from the TVar, but the TVar node
+remains attached to the table so there is no decrement on the number of elements.
+The element is garbage collected unless you have a direct reference to the element, not the DBRef
+Note that you can still have a valid reference to this element, but this element  is no longer
+in the cache. The usual thing is that you do not have it, and the element will be garbage
+collected (but still there will be a NotRead entry for this key!!!). If the DBRef is read again, the
+TCache will go to permanent storage to retrieve it.
+
+clear opertions such `clearsyncCache` does something similar:  it does not delete the
+element from the cache. It just inform the garbage collector that there is no longer necessary to maintain
+the element in the cache. So if the element has no other references (maybe you keep a
+variable that point to that DBRef) it will be GCollected.
+If this is not possible, it will remain in the cache and will be treated as such,
+until the DBRef is no longer referenced by the program. This is done by means of a weak pointer
+
+All these complications are necessary because the programmer can  handle DBRefs directly,
+so the cache has no complete control of the DBRef life cycle, short to speak.
+
+a DBRef can be in the states:
+
+- `Exist`:  it is in the cache
+
+- `DoesNotExist`: neither is in the cache neither in storage: it is like a cached "notfound" to
+speed up repeated failed requests
+
+- `NotRead`:  may exist or not in permanent storage, but not in the cache
+
+
+In terms of Garbage collection it may be:
+
+
+
+1 - pending garbage collection:  attached to the hashtable by means of a weak pointer: delete it asap
+
+2 - cached: attached by a direct pointer and a weak pointer: It is being cached
+
+
+clearsyncCache just pass elements from 2 to 1
+
+--}
 ,flushDBRef
 ,flushKey
 ,invalidateKey
@@ -530,7 +573,7 @@ onNothing io onerr= do
 flushDBRef ::  (IResource a, Typeable a) =>DBRef a -> STM()
 flushDBRef (DBRef _ tv)=   writeTVar  tv  NotRead
 
--- flush the element with the given key
+-- | flush the element with the given key
 flushKey key=  do
    (cache,time) <- unsafeIOToSTM $ readIORef refcache
    c <- unsafeIOToSTM $ H.lookup cache key
@@ -542,7 +585,7 @@ flushKey key=  do
             Nothing -> unsafeIOToSTM (finalize w)  >> flushKey key
        Nothing   -> return ()
 
--- label the object as not existent in database
+-- | label the object as not existent in database
 invalidateKey key=  do
    (cache,time) <- unsafeIOToSTM $ readIORef refcache
    c <- unsafeIOToSTM $ H.lookup cache key
@@ -758,6 +801,7 @@ updateListToHash hash kv= mapM (update1 hash) kv where
 
 
 -- | Start the thread that periodically call `clearSyncCache` to clean and writes on the persistent storage.
+-- it is indirecly set by means of `syncWrite`, since it is more higuer level. I recommend to use the latter
 -- Otherwise, 'syncCache' or `clearSyncCache` or `atomicallySync` must be invoked explicitly or no persistence will exist.
 -- Cache writes allways save a coherent state
 clearSyncCacheProc ::
@@ -802,8 +846,6 @@ data SyncMode= Synchronous   -- ^ sync state to permanent storage when `atomical
 tvSyncWrite= unsafePerformIO $ newIORef  (Synchronous, Nothing)
 
 -- | Specify the cache synchronization policy with permanent storage. See `SyncMode` for details
--- 
-
 syncWrite::  SyncMode -> IO()
 syncWrite mode= do
      (_,thread) <- readIORef tvSyncWrite
