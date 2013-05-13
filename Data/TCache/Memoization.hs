@@ -15,7 +15,7 @@
             , ExistentialQuantification
             , FlexibleInstances
             , TypeSynonymInstances  #-}
-module Data.TCache.Memoization (writeCached,cachedByKey,flushCached,cachedp,addrStr,Executable(..))
+module Data.TCache.Memoization (writeCached,cachedByKey,cachedByKeySTM,flushCached,cachedp,addrStr,Executable(..))
 
 where
 import Data.Typeable
@@ -64,7 +64,7 @@ instance  (Indexable a) => IResource (Cached a  b) where
 
   writeResource _= return ()
   delResource _= return ()
-  readResourceByKey k=   error $ "access By key is undefined for cached objects.key= " ++ k
+  readResourceByKey k= return Nothing -- error $ "access By key is undefined for cached objects.key= " ++ k
 
 
   readResource (Cached a f _ _)=do
@@ -95,24 +95,27 @@ writeCached  a b c d=
 
 
 cached ::  (Indexable a,Typeable a,  Typeable b, Executable m,MonadIO m) => Int -> (a -> m b) -> a  -> m b
-cached time  f a=  do
+cached time  f a= liftIO . atomically $ cachedSTM time f a
+
+cachedSTM time f a= do
    let prot= Cached a f undefined undefined
-   cho@(Cached _ _ b t)  <- liftIO $ getResource prot `onNothing` fillIt prot
+   let ref= getDBRef $ keyResource prot
+   cho@(Cached _ _ b t) <- readDBRef ref `onNothing` fillIt ref prot
    case time of
      0 -> return b
      _ -> do
-           TOD tnow _ <- liftIO $ getClockTime
-           if tnow - t > fromIntegral time
+           TOD tnow _ <- unsafeIOToSTM $ getClockTime
+           if tnow - t >= fromIntegral time
                       then do
-                          liftIO $ deleteResource cho
-                          cached time f a
+                            Cached _ _ b _ <- fillIt ref prot
+                            return b
                       else  return b
    where
    -- has been invalidated by flushCached
-   fillIt proto= do
-   r <- return . fromJust =<< (readResource proto)   -- !> "fillIt"
-   withResources [] $ const [r]
-   return r
+   fillIt ref proto= do
+     let r = unsafePerformIO $return . fromJust =<< readResource proto   -- !> "fillIt"
+     writeDBRef ref r
+     return r
 
 -- | Memoize the result of a computation for a certain time. A string 'key' is used to index the result
 --
@@ -120,6 +123,9 @@ cached time  f a=  do
 -- . Time == 0 means no timeout
 cachedByKey :: (Typeable a, Executable m,MonadIO m) => String -> Int ->  m a -> m a
 cachedByKey key time  f = cached  time (\_ -> f) key
+
+cachedByKeySTM :: (Typeable a, Executable m) => String -> Int ->  m a -> STM a
+cachedByKeySTM key time  f = cachedSTM  time (\_ -> f) key
 
 -- Flush the cached object indexed by the key
 flushCached :: String -> IO ()

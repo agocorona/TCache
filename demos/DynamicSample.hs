@@ -15,11 +15,9 @@ example of IDynamic usage.
 --two objects with two different datatypes: Int and String
 
 instance Indexable Int where     
-   key x=  show x
+   key =  show 
 
-  
-  
- 
+
 instance Indexable String where
    key x=  take 2 x
  
@@ -52,8 +50,8 @@ main= do
   -- to use heterogeneous data in the same transaction,
   -- use DBRef's:
   s <- atomically $ do
-        let refInt    = getDBRef $ keyResource x    :: DBRef Int
-            refString = getDBRef $ keyResource "ho" :: DBRef String
+        let refInt    = getDBRef $ key x    :: DBRef Int
+            refString = getDBRef $ key "ho" :: DBRef String
         i <- readDBRef refInt
         writeDBRef refString $ "hola, the retrieved value of x is " ++ show i
         s <- readDBRef refString

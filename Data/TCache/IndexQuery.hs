@@ -283,9 +283,8 @@ instance SetOperations  (JoinData a a') [DBRef a'] (JoinData a a') where
      return [(zs, union xs ys) | (zs,xs) <- xss]
 
 
--- |  return all  the (indexed) registers which has this field
-indexOf :: (Queriable reg a )
-                   => (reg -> a) -> STM [(a,[DBRef reg])]
+-- |  return all  the (indexed)  values which this field has and a DBRef pointer to the register
+indexOf :: (Queriable reg a) => (reg -> a) -> STM [(a,[DBRef reg])]
 indexOf selector= do
    let [one, two]= typeRepArgs $! typeOf selector
    let rindex= getDBRef $! keyIndex one two
