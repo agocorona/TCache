@@ -200,6 +200,7 @@ containsElem  sel wstr = do
             let wordsr = catMaybes $ map (\n -> M.lookup n mmapIntString) $ catMaybes mns
             return $ map getDBRef wordsr
 
+-- | return all the values of a given field (if it has been indexed with 'index')
 allElemsOf :: (IResource a, Typeable a, Typeable b) => (a -> b) -> STM [T.Text]
 allElemsOf  sel  = do
     let [t1, t2]=  typeRepArgs $! typeOf sel

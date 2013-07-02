@@ -811,8 +811,10 @@ clearSyncCacheProc ::
       -> IO ThreadId           -- ^ Identifier of the thread created
 clearSyncCacheProc  time check sizeObjects= forkIO  clear
  where
- clear =handle ( \ (e :: SomeException)-> hPutStr stderr (show e) >> clear ) $ do
-    	clearSyncCache   check sizeObjects   --`debug` "CLEAR"
+ clear = do
+     threadDelay $ time * 1000000
+     handle ( \ (e :: SomeException)-> hPutStr stderr (show e) >> clear ) $ do
+    	clearSyncCache   check sizeObjects                                        -- !>  "CLEAR"
     	clear
 
 criticalSection mv f= bracket

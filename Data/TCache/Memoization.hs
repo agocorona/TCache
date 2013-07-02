@@ -49,13 +49,16 @@ class Executable m where
   execute:: m a -> a
 
 instance Executable IO where
-  execute= unsafePerformIO
+  execute m = unsafePerformIO $ f1 m ""
+   where
+   f1 m x= m
 
 instance Executable Identity where
   execute (Identity x)= x
 
 instance MonadIO Identity where
   liftIO f=  Identity $!  unsafePerformIO $! f
+
 
 cachedKeyPrefix = "cached"
 
