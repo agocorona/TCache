@@ -141,7 +141,11 @@ indexText
      => (a -> b)      -- ^ field to index
      -> (b -> T.Text) -- ^ method to convert the field content to lazy Text (for example `pack` in case of String fields). This permits to index non Textual fields
      -> IO ()
-indexText sel convert= addTrigger (indext sel  (words1 . convert))
+indexText sel convert= do
+  addTrigger (indext sel  (words1 . convert))
+  let [t1,t2]=  typeRepArgs $! typeOf sel
+      t=  show t1 ++ show t2
+  withResources [] $ const [IndexText t 0 M.empty M.empty M.empty]
 
 -- | trigger the indexation of list fields with elements convertible to Text
 indexList
@@ -149,7 +153,12 @@ indexList
      => (a -> b)      -- ^ field to index
      -> (b -> [T.Text]) -- ^ method to convert a field element to Text (for example `pack . show` in case of elemets with Show instances)
      -> IO ()
-indexList sel convert= addTrigger (indext sel  convert)
+indexList sel convert= do
+  addTrigger (indext sel  convert)
+  let [t1,t2]=  typeRepArgs $! typeOf sel
+      t=  show t1 ++ show t2
+  withResources [] $ const [IndexText t 0 M.empty M.empty M.empty]
+
 
 
 indext :: (IResource a, Typeable a,Typeable b)
@@ -191,7 +200,9 @@ containsElem  sel wstr = do
     mr <- withSTMResources [IndexText t u u u u]
        $ \[r] -> resources{toReturn= r}
     case mr of
-      Nothing -> return []
+      Nothing -> do
+        let fields= show $ typeOf  sel
+        error $ "the index for "++ fields ++" do not exist. At main, use \"Data.TCache.IdexQuery.index\" to start indexing this field"
       Just (IndexText t n _ mmapIntString map1) ->
        case M.lookup w map1 of
         Nothing ->  return []

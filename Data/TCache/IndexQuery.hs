@@ -185,11 +185,14 @@ selectorIndex selector rindex pobject mobj = do
 index
   :: (Queriable reg a) =>
      (reg -> a) -> IO ()
-index sel=
+index sel= do
    let [one, two]= typeRepArgs $! typeOf sel
        rindex= getDBRef $! keyIndex one two
-   in  addTrigger $ selectorIndex sel rindex
-
+   addTrigger $ selectorIndex sel rindex
+   withResources [] $ const  [ (Index M.empty  `asTypeOf` indexsel sel )]
+   where
+   indexsel :: (reg-> a)  -> Index reg a
+   indexsel= undefined
 -- | implement the relational-like operators, operating on record fields
 class RelationOps field1 field2 res | field1 field2 -> res  where
     (.==.) :: field1 -> field2 -> STM  res
@@ -289,7 +292,11 @@ indexOf selector= do
    let [one, two]= typeRepArgs $! typeOf selector
    let rindex= getDBRef $! keyIndex one two
    mindex <- readDBRef rindex
-   case mindex of Just (Index index) -> return $ M.toList index; _ -> return []
+   case mindex of
+     Just (Index index) -> return $ M.toList index;
+     _ -> do
+        let fields= show $ typeOf  selector
+        error $ "the index for "++ fields ++" do not exist. At main, use \"Data.TCache.IdexQuery.index\" to start indexing this field"
 
 retrieve :: Queriable reg a => (reg -> a) -> a -> (a -> a -> Bool) -> STM[DBRef reg]
 retrieve field value op= do
