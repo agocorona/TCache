@@ -145,8 +145,11 @@ indexText sel convert= do
   addTrigger (indext sel  (words1 . convert))
   let [t1,t2]=  typeRepArgs $! typeOf sel
       t=  show t1 ++ show t2
-  withResources [] $ const [IndexText t 0 M.empty M.empty M.empty]
-
+  let proto = IndexText t 0 M.empty M.empty M.empty
+  withResources [proto] $ init proto
+  where
+  init proto [Nothing]  = [proto]
+  init _ [Just _] = []
 -- | trigger the indexation of list fields with elements convertible to Text
 indexList
   :: (IResource a, Typeable a, Typeable b)
@@ -157,7 +160,12 @@ indexList sel convert= do
   addTrigger (indext sel  convert)
   let [t1,t2]=  typeRepArgs $! typeOf sel
       t=  show t1 ++ show t2
-  withResources [] $ const [IndexText t 0 M.empty M.empty M.empty]
+  let proto= IndexText t 0 M.empty M.empty M.empty
+  withResources [proto] $ init proto
+
+  where
+  init proto [Nothing] = [proto]
+  init _ [Just _]= []
 
 
 

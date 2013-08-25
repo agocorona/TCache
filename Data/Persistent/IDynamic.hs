@@ -36,15 +36,15 @@ import Data.Map as M(empty)
 import Data.RefSerialize
 import Data.HashTable as HT
 
---import Debug.Trace
---(!>)= flip trace
+import Debug.Trace
+(!>)= flip trace
 
 
 data IDynamic  =  IDyn  (IORef IDynType) deriving Typeable
 
 data IDynType= forall a w r.(Typeable a, Serialize a)
-               => DRight  !a
-               |  DLeft  !(ByteString ,(Context, ByteString))
+               => DRight !a
+             |  DLeft  !(ByteString ,(Context, ByteString))
 
 
                deriving Typeable
@@ -116,18 +116,23 @@ instance Show  IDynamic where
 
 toIDyn x= IDyn . unsafePerformIO . newIORef $ DRight x
 
- 
+-- | check if a (possibly polimorphic) value within a IDynamic value has the given serialization"
+serializedEqual (IDyn r) str= unsafePerformIO $ do
+  t <- readIORef r
+  case t of
+   DRight x -> return $ runW (showp x) == str   !> ("R "++ (show $ unpack $ runW (showp x)))
+   DLeft (str', _) -> return $ str== str'       !> ("L "++ (show $ unpack str' ))
+  
 fromIDyn :: (Typeable a , Serialize a)=> IDynamic -> a
-fromIDyn x=r where
-  r = case safeFromIDyn x of
-          Left s -> error s
+fromIDyn x= case safeFromIDyn x of
+          Left  s -> error s
           Right v -> v
 
 
 safeFromIDyn :: (Typeable a, Serialize a) => IDynamic -> Either String a       
 safeFromIDyn (d@(IDyn r))= final where
  final= unsafePerformIO $ do
-  t<-  readIORef r
+  t <- readIORef r
   case t of
    DRight x ->  return $ case cast x of
         Nothing -> Left $ "fromIDyn: unable to extract from "
@@ -141,9 +146,9 @@ safeFromIDyn (d@(IDyn r))= final where
    DLeft (str, c) ->
     handle (\(e :: SomeException) ->  return $ Left (show e)) $  -- !> ("safeFromIDyn : "++ show e)) $
         do
-          let v= runRC  c rreadp str -- !> unpack str
-          writeIORef r $! DRight v -- !> ("***reified "++ unpack str)
-          return $! Right v -- !>  ("*** end reified " ++ unpack str)
+          let v= runRC  c rreadp str    -- !> unpack str
+          writeIORef r $! DRight v      -- !> ("***reified "++ unpack str)
+          return $! Right v             -- !>  ("*** end reified " ++ unpack str)
 
 
 

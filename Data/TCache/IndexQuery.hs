@@ -73,7 +73,15 @@ fields in a registers are to be indexed, they must have different types.
 {-# LANGUAGE  DeriveDataTypeable, MultiParamTypeClasses
 , FunctionalDependencies, FlexibleInstances, UndecidableInstances
 , TypeSynonymInstances, IncoherentInstances #-}
-module Data.TCache.IndexQuery(index, RelationOps(..), indexOf, recordsWith, (.&&.), (.||.), Select(..)) where
+module Data.TCache.IndexQuery(
+index
+, RelationOps((.==.),(.<.),(.<=.),(.>=.),(.>.))
+, indexOf
+, recordsWith
+, (.&&.)
+, (.||.)
+, Select(..))
+where
 
 import Data.TCache
 import Data.TCache.Defs
@@ -189,8 +197,11 @@ index sel= do
    let [one, two]= typeRepArgs $! typeOf sel
        rindex= getDBRef $! keyIndex one two
    addTrigger $ selectorIndex sel rindex
-   withResources [] $ const  [ (Index M.empty  `asTypeOf` indexsel sel )]
+   let proto= Index M.empty  `asTypeOf` indexsel sel
+   withResources [proto]  $ init proto
    where
+   init proto [Nothing]  =  [proto]
+   init _ [Just _] = []
    indexsel :: (reg-> a)  -> Index reg a
    indexsel= undefined
 -- | implement the relational-like operators, operating on record fields
