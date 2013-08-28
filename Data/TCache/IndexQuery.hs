@@ -74,17 +74,21 @@ fields in a registers are to be indexed, they must have different types.
 , FunctionalDependencies, FlexibleInstances, UndecidableInstances
 , TypeSynonymInstances, IncoherentInstances #-}
 module Data.TCache.IndexQuery(
-index
-, RelationOps((.==.),(.<.),(.<=.),(.>=.),(.>.))
+  index
+, (.==.)
+, (.<.)
+, (.<=.)
+, (.>=.)
+, (.>.)
 , indexOf
 , recordsWith
 , (.&&.)
 , (.||.)
-, Select(..))
+, select)
 where
 
 import Data.TCache
-import Data.TCache.Defs
+import Data.TCache.DefaultPersistence
 import Data.List
 import Data.Typeable
 import Control.Concurrent.STM
@@ -105,11 +109,13 @@ instance (Read reg, Read a, Show reg, Show a
       , Typeable a,Ord a)
       => Queriable reg a
 
-instance  Queriable reg a => IResource (Index reg a) where
-  keyResource = key
-  writeResource =defWriteResource
-  readResourceByKey = defReadResourceByKey
-  delResource = defDelResource
+--instance  Queriable reg a => IResource (Index reg a) where
+--  keyResource = key
+--  writeResource =defWriteResource
+--  readResourceByKey = defReadResourceByKey
+--  delResource = defDelResource
+
+
 
 data Index reg a= Index (M.Map a [DBRef reg]) deriving (  Show, Typeable)
 
@@ -132,7 +138,7 @@ instance (Typeable reg, Typeable a) => Indexable (Index reg a) where
        where
        [typeofreg, typeofa]= typeRepArgs $! typeOf map
 
-
+   defPath= const ""
 
 getIndex :: (Queriable reg a)
    => ( reg -> a) -> a -> STM(DBRef (Index reg a), Index reg a,[DBRef reg])
@@ -213,7 +219,7 @@ class RelationOps field1 field2 res | field1 field2 -> res  where
     (.<.) :: field1 -> field2 ->  STM  res
 
 -- Instance of relations betweeen fields and values
--- field .op. valued
+-- field .op. value
 instance (Queriable reg a) => RelationOps (reg -> a) a  [DBRef reg] where
     (.==.) field value= do
        (_ ,_ ,dbrefs) <- getIndex field value
@@ -221,7 +227,7 @@ instance (Queriable reg a) => RelationOps (reg -> a) a  [DBRef reg] where
 
     (.>.)  field value= retrieve field value (>)
     (.<.)  field value= retrieve field value (<)
-    (.<=.)  field value= retrieve field value (<=)
+    (.<=.) field value= retrieve field value (<=)
 
     (.>=.) field value= retrieve field value (>=)
 

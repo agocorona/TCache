@@ -12,13 +12,13 @@ catchIO = Exception.catch
 
 
 version :: Version
-version = Version {versionBranch = [0,10,0,1], versionTags = []}
+version = Version {versionBranch = [0,10,1,0], versionTags = []}
 bindir, libdir, datadir, libexecdir :: FilePath
 
-bindir     = "C:\\Users\\agocorona\\AppData\\Roaming\\cabal\\bin"
-libdir     = "C:\\Users\\agocorona\\AppData\\Roaming\\cabal\\TCache-0.10.0.1\\ghc-7.4.1"
-datadir    = "C:\\Users\\agocorona\\AppData\\Roaming\\cabal\\TCache-0.10.0.1"
-libexecdir = "C:\\Users\\agocorona\\AppData\\Roaming\\cabal\\TCache-0.10.0.1"
+bindir     = "C:\\Users\\magocoal\\AppData\\Roaming\\cabal\\bin"
+libdir     = "C:\\Users\\magocoal\\AppData\\Roaming\\cabal\\TCache-0.10.1.0\\ghc-7.4.2"
+datadir    = "C:\\Users\\magocoal\\AppData\\Roaming\\cabal\\TCache-0.10.1.0"
+libexecdir = "C:\\Users\\magocoal\\AppData\\Roaming\\cabal\\TCache-0.10.1.0"
 
 getBinDir, getLibDir, getDataDir, getLibexecDir :: IO FilePath
 getBinDir = catchIO (getEnv "TCache_bindir") (\_ -> return bindir)

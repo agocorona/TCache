@@ -1,5 +1,5 @@
 name: TCache
-version: 0.10.0.8
+version: 0.10.1.0
 cabal-version: >= 1.6
 build-type: Simple
 license: BSD3
@@ -17,9 +17,15 @@ description: TCache is a transactional cache with configurable persitence. It al
              .
              0.10.0.8 subversion add cachedByKeySTM
              .
+             0.10.0.9 fixed an error in clearSyncChacheProc and SynWrite Asyncronous that checked the cache continuously
+             .
              See "Data.TCache" for details
+             .
+             In this release:
+             .
+             added setDefaultPersist and modified the signature of setPersist in Data.TCache.DefaultPersistence.
 
-             This release fixes some bugs in the module IndexText
+
 
 
 category: Data, Database

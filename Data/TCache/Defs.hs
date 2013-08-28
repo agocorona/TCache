@@ -1,7 +1,7 @@
 {-# LANGUAGE   TypeSynonymInstances, FlexibleInstances, ScopedTypeVariables, DeriveDataTypeable #-}
 
-{- | some internal definitions. To use default persistence, use
-'Data.TCache.DefaultPersistence' instead -}
+{- | some internal definitions. To use default persistence, import
+@Data.TCache.DefaultPersistence@ instead -}
 
 module Data.TCache.Defs  where
 import Data.Typeable
@@ -101,8 +101,8 @@ The performance of serialization is not critical.
 class Serializable a  where
   serialize   :: a -> B.ByteString
   deserialize :: B.ByteString -> a
-  setPersist :: a -> Persist         -- ^ `defaultPersist`if not overriden
-  setPersist _= defaultPersist
+  setPersist  :: a -> Maybe Persist              -- ^ `defaultPersist` if Nothing
+  setPersist =  const Nothing
 
 --instance (Show a, Read a)=> Serializable a where
 --  serialize= show
@@ -110,22 +110,30 @@ class Serializable a  where
 
 
 -- | a persist mechanism has to implement these three primitives
--- 'defaultpersist' is the default file persistence
+-- 'filePersist' is the default file persistence
 data Persist = Persist{
        readByKey   ::  (String -> IO(Maybe B.ByteString)) -- ^  read by key. It must be strict
      , write       ::  (String -> B.ByteString -> IO())   -- ^  write. It must be strict
-     , delete      ::  (String -> IO())}       -- ^  delete
+     , delete      ::  (String -> IO())}                  -- ^  delete
 
 -- | Implements default persistence of objects in files with their keys as filenames
-defaultPersist= Persist
+filePersist   = Persist
     {readByKey= defaultReadByKey
-    ,write= defaultWrite
-    ,delete= defaultDelete}
+    ,write    = defaultWrite
+    ,delete   = defaultDelete}
 
-getPersist x= return (setPersist x)
-  `Exception.catch` (\(e:: SomeException) -> error "setPersist must not depend on the type, not the value of the parameter: " )
+defaultPersistIORef = unsafePerformIO $ newIORef  filePersist
 
+-- | Set the default persistence mechanism of all 'serializable' objetcts. By default it is 'filePersist'
+--
+-- this statement must be the first one before any other in TCache
+setDefaultPersist p= writeIORef defaultPersistIORef p
 
+getDefaultPersist =  unsafePerformIO $ readIORef defaultPersistIORef
+
+getPersist x= unsafePerformIO $ case setPersist x of
+     Nothing -> readIORef defaultPersistIORef
+  `Exception.catch` (\(e:: SomeException) -> error "setPersist must depend on the type, not the value of the parameter: " )
 
 
 defaultReadByKey ::   String-> IO (Maybe B.ByteString)
@@ -186,18 +194,18 @@ defaultDelete filename =do
 
 defReadResourceByKey k= iox where
     iox= do
-      let Persist f _ _ = setPersist  x
+      let Persist f _ _ = getPersist  x
       f  file >>=  evaluate . fmap  deserialize
       where
       file= defPath x ++ k
       x= undefined `asTypeOf` (fromJust $ unsafePerformIO iox)
 
 defWriteResource s= do
-      let Persist _ f _ = setPersist  s
+      let Persist _ f _ = getPersist  s
       f (defPath s ++ key s) $ serialize s
 
 defDelResource s= do
-      let Persist _ _ f = setPersist s
+      let Persist _ _ f = getPersist s
       f $ defPath s ++ key s
 
 

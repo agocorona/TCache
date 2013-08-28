@@ -36,8 +36,8 @@ import Data.Map as M(empty)
 import Data.RefSerialize
 import Data.HashTable as HT
 
-import Debug.Trace
-(!>)= flip trace
+--import Debug.Trace
+--(!>)= flip trace
 
 
 data IDynamic  =  IDyn  (IORef IDynType) deriving Typeable
@@ -120,8 +120,8 @@ toIDyn x= IDyn . unsafePerformIO . newIORef $ DRight x
 serializedEqual (IDyn r) str= unsafePerformIO $ do
   t <- readIORef r
   case t of
-   DRight x -> return $ runW (showp x) == str   !> ("R "++ (show $ unpack $ runW (showp x)))
-   DLeft (str', _) -> return $ str== str'       !> ("L "++ (show $ unpack str' ))
+   DRight x -> return $ runW (showp x) == str   -- !> ("R "++ (show $ unpack $ runW (showp x)))
+   DLeft (str', _) -> return $ str== str'       -- !> ("L "++ (show $ unpack str' ))
   
 fromIDyn :: (Typeable a , Serialize a)=> IDynamic -> a
 fromIDyn x= case safeFromIDyn x of

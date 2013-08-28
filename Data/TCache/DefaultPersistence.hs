@@ -10,7 +10,13 @@
  .The last one defines persistence in files as default, but it can be changed
  to persistence in databases, for examople.
 -}
-module Data.TCache.DefaultPersistence(Indexable(..),Serializable(..),defaultPersist,Persist(..)) where
+module Data.TCache.DefaultPersistence(
+Indexable(..)
+,Serializable(..)
+,setDefaultPersist
+,getDefaultPersist
+,filePersist
+,Persist(..)) where
 
 import System.IO.Unsafe
 import Data.Typeable
@@ -21,8 +27,7 @@ import Data.TCache
 
 
 
-instance  (Typeable a,  Indexable a, Serializable a ) => IResource a where
-
+instance  (Typeable a,  Indexable a, Serializable a) => IResource a where
   keyResource = key
   writeResource =defWriteResource
   readResourceByKey = defReadResourceByKey
