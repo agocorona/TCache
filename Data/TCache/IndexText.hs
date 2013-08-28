@@ -62,7 +62,7 @@ module Data.TCache.IndexText(
 , allElemsOf) where
 import Data.TCache
 import Data.TCache.IndexQuery
-import Data.TCache.DefaultPersistence
+import Data.TCache.Defs
 import qualified Data.Text.Lazy as T
 import Data.Typeable
 import qualified Data.Map as M
@@ -102,11 +102,11 @@ instance Serializable IndexText  where
 instance  Indexable IndexText  where
    key (IndexText v _ _ _ _)=    "indextext " ++ v
 
---instance IResource IndexText where
---  keyResource = key
---  writeResource =defWriteResource
---  readResourceByKey = defReadResourceByKey
---  delResource = defDelResource
+instance IResource IndexText where
+  keyResource = key
+  writeResource =defWriteResource
+  readResourceByKey = defReadResourceByKey
+  delResource = defDelResource
 
 readInitDBRef v x= do
   mv <- readDBRef x

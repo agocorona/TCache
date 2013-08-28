@@ -88,7 +88,7 @@ module Data.TCache.IndexQuery(
 where
 
 import Data.TCache
-import Data.TCache.DefaultPersistence
+import Data.TCache.Defs
 import Data.List
 import Data.Typeable
 import Control.Concurrent.STM
@@ -138,7 +138,13 @@ instance (Typeable reg, Typeable a) => Indexable (Index reg a) where
        where
        [typeofreg, typeofa]= typeRepArgs $! typeOf map
 
-   defPath= const ""
+
+
+instance (Queriable reg a, Typeable reg, Typeable a) => IResource (Index reg a) where
+  keyResource = key
+  writeResource =defWriteResource
+  readResourceByKey = defReadResourceByKey
+  delResource = defDelResource
 
 getIndex :: (Queriable reg a)
    => ( reg -> a) -> a -> STM(DBRef (Index reg a), Index reg a,[DBRef reg])
@@ -162,7 +168,7 @@ getIndexr rindex val= do
    return (rindex, Index index, dbrefs)
 
 selectorIndex
-  :: (Queriable reg a
+  :: (Queriable reg a, IResource reg
       ) =>
      (reg -> a) -> DBRef (Index reg a) -> DBRef reg -> Maybe reg -> STM ()
 
