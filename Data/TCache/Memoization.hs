@@ -49,7 +49,7 @@ class Executable m where
   execute:: m a -> a
 
 instance Executable IO where
-  execute m = unsafePerformIO $ f1 m ""
+  execute m = unsafePerformIO $! f1 m ""
    where
    f1 m x= m
 

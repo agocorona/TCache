@@ -626,7 +626,7 @@ flushAll = do
 -- WARNING: To catch evaluations errors at the right place, the values to be written must be fully evaluated.
 -- Errors in delayed evaluations at serialization time can cause inconsistencies in the database.
 
-withSTMResources :: (IResource a, Typeable a)=> [a]        -- ^ the list of resources to be retrieved
+withSTMResources :: (IResource a, Typeable a)=> [a]   -- ^ the list of resources to be retrieved
                      -> ([Maybe a]-> Resources a x)   -- ^ The function that process the resources found and return a Resources structure
                      -> STM x                  -- ^ The return value in the STM monad.
 

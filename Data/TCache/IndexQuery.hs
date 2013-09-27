@@ -84,7 +84,10 @@ module Data.TCache.IndexQuery(
 , recordsWith
 , (.&&.)
 , (.||.)
-, select)
+, select
+, Queriable
+, setIndexPersist
+, getIndexPersist)
 where
 
 import Data.TCache
@@ -99,7 +102,7 @@ import qualified  Data.Map as M
 import System.IO.Unsafe
 import Data.ByteString.Lazy.Char8(pack, unpack)
 
-class (Read reg, Read a, Show reg, Show a
+class ( Read a,  Show a
       , IResource reg,Typeable reg
       , Typeable a,Ord a)
       => Queriable reg a
@@ -117,9 +120,9 @@ instance (Read reg, Read a, Show reg, Show a
 
 
 
-data Index reg a= Index (M.Map a [DBRef reg]) deriving (  Show, Typeable)
+data Index reg a= Index (M.Map a [DBRef reg]) deriving ( Show, Typeable)
 
-instance (IResource reg, Typeable reg,Read reg,Show reg, Show a, Read a, Ord a)
+instance (IResource reg, Typeable reg, Ord a, Read a)
    => Read (Index reg a) where
   readsPrec n ('I':'n':'d':'e':'x':' ':str)
      = map (\(r,s) -> (Index r, s)) rs where rs= readsPrec n str
@@ -129,7 +132,16 @@ instance (IResource reg, Typeable reg,Read reg,Show reg, Show a, Read a, Ord a)
 instance (Queriable reg a) => Serializable (Index reg a)  where
   serialize= pack . show
   deserialize= read . unpack
+  setPersist= const $ unsafePerformIO $ readIORef _indexPersist
 
+_indexPersist= unsafePerformIO $ newIORef Nothing
+
+-- | Set the default persistence for the indexes
+--
+-- Must be called before any other TCache sentence
+setIndexPersist p= writeIORef _indexPersist $ Just p
+
+getIndexPersist=  unsafePerformIO $  readIORef _indexPersist
 
 keyIndex treg tv= "index " ++ show treg ++ show tv
 

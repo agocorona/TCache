@@ -46,7 +46,8 @@ class IResource a where
         -}
         readResourceByKey :: String -> IO(Maybe a)
 
-        -- To allow accesses not by key. (it defaults as @readResourceByKey $ keyResource x@)
+        -- To allow accesses not by key but by any criteria based on the content of the record fields
+        -- included in the -partial- definition of the input record. (it defaults as @readResourceByKey $ keyResource x@)
         readResource :: a -> IO (Maybe a)
         readResource x = readResourceByKey $ keyResource x
 
@@ -138,7 +139,7 @@ defaultReadResourceByKey k= iox
      
      filename=  defPathIO iox  ++ k
 
-     defPathIO ::(Serializable a, Indexable a)=> IO (Maybe a) -> String
+     defPathIO :: (Serializable a, Indexable a)=> IO (Maybe a) -> String
      defPathIO iox= defPath x
        where
        Just x= unsafePerformIO $ (return $ Just undefined)  `asTypeOf`  iox

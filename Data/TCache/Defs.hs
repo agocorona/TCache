@@ -126,13 +126,14 @@ defaultPersistIORef = unsafePerformIO $ newIORef  filePersist
 
 -- | Set the default persistence mechanism of all 'serializable' objetcts. By default it is 'filePersist'
 --
--- this statement must be the first one before any other in TCache
+-- this statement must be the first one before any other TCache call
 setDefaultPersist p= writeIORef defaultPersistIORef p
 
 getDefaultPersist =  unsafePerformIO $ readIORef defaultPersistIORef
 
 getPersist x= unsafePerformIO $ case setPersist x of
      Nothing -> readIORef defaultPersistIORef
+     Just p -> return p
   `Exception.catch` (\(e:: SomeException) -> error "setPersist must depend on the type, not the value of the parameter: " )
 
 
@@ -215,6 +216,6 @@ readFileStrict f = openFile f ReadMode >>= \ h -> readIt h `finally` hClose h
   readIt h= do
       s   <- hFileSize h
       let n= fromIntegral s
-      str <- B.hGet h n -- replicateM n (B.hGetChar h) 
+      str <- B.hGet h n
       return str
 

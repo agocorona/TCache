@@ -76,6 +76,8 @@ import Data.Char
 import Control.Concurrent(threadDelay)
 import Data.ByteString.Lazy.Char8(pack, unpack)
 import Control.Monad
+import System.IO.Unsafe
+
 --import Debug.Trace
 --(!>)= flip trace
 
@@ -98,6 +100,7 @@ instance Read IndexText  where
 instance Serializable IndexText  where
   serialize= pack . show
   deserialize= read . unpack
+  setPersist= const $ getIndexPersist
 
 instance  Indexable IndexText  where
    key (IndexText v _ _ _ _)=    "indextext " ++ v

@@ -1,5 +1,5 @@
 name: TCache
-version: 0.10.1.0
+version: 0.10.2.0
 cabal-version: >= 1.6
 build-type: Simple
 license: BSD3
@@ -24,7 +24,7 @@ description: TCache is a transactional cache with configurable persitence. It al
              In this release:
              .
              added setDefaultPersist and modified the signature of setPersist in Data.TCache.DefaultPersistence.
-
+             Fixed issues with ghc 7.6.3
 
 
 
@@ -47,11 +47,15 @@ library
                    RefSerialize -any
 
 
+
     exposed-modules: Data.TCache Data.TCache.DefaultPersistence,
                      Data.TCache.Defs Data.TCache.IResource Data.TCache.IndexQuery
                      Data.TCache.IndexText Data.TCache.Memoization Data.TCache.Triggers
                      Data.Persistent.Collection
                      Data.Persistent.IDynamic
+
+
+
     exposed: True
     buildable: True
     extensions: OverlappingInstances UndecidableInstances
