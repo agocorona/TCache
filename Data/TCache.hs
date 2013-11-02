@@ -296,7 +296,7 @@ where
 
 import GHC.Conc
 import Control.Monad(when)
-import Data.HashTable as H
+import qualified Data.HashTable.IO as H
 import Data.IORef
 import System.IO.Unsafe
 import System.IO(hPutStr, stderr)
@@ -323,7 +323,7 @@ import Control.Exception(catch, throw,evaluate)
 -- The weak reference keeps the dbref alive until is it not referenced elsewere
 data CacheElem= forall a.(IResource a,Typeable a) => CacheElem (Maybe (DBRef a)) (Weak(DBRef a))
 
-type Ht = HashTable String  CacheElem
+type Ht = H.BasicHashTable   String  CacheElem
 
 -- contains the hastable, last sync time
 type Cache = IORef (Ht , Integer)
@@ -340,7 +340,7 @@ refcache =unsafePerformIO $ newCache >>= newIORef
 -- |   Creates a new cache. Experimental
 newCache  :: IO (Ht , Integer)
 newCache =do
-        c <- H.new (==) hashString
+        c <- H.new -- (==) H.hashString
         return (c,0)
 
 -- | Return the  total number of DBRefs in the cache. For debug purposes.
@@ -349,7 +349,7 @@ newCache =do
 numElems :: IO Int
 numElems= do
    (cache, _) <- readIORef refcache
-   elems <-   toList cache
+   elems <-   H.toList cache
    return $ length elems
 
 
@@ -364,7 +364,7 @@ fixToCache :: (IResource a, Typeable a) => DBRef a -> IO ()
 fixToCache dbref@(DBRef k tv)= do
        (cache, _) <- readIORef refcache
        w <- mkWeakPtr dbref  $ Just $ fixToCache dbref
-       H.update cache k (CacheElem (Just dbref) w)
+       H.insert cache k (CacheElem (Just dbref) w)
        return()
 
 -- | Return the reference value. If it is not in the cache, it is fetched
@@ -450,7 +450,7 @@ getDBRef key=   unsafePerformIO $! getDBRef1 $! key where
                 case mdb of
                   Nothing -> return $! castErr dbref     -- !> "just"
                   Just _  -> do
-                        H.update cache key (CacheElem Nothing w) --to notify when the DBREf leave its reference
+                        H.insert cache key (CacheElem Nothing w) --to notify when the DBREf leave its reference
                         return $! castErr dbref
         Nothing -> finalize w >>  getDBRef1 key          -- !> "finalize"  -- the weak pointer has not executed his finalizer
 
@@ -458,7 +458,7 @@ getDBRef key=   unsafePerformIO $! getDBRef1 $! key where
      tv<- newTVarIO NotRead                              -- !> "Nothing"
      dbref <- evaluate $ DBRef key  tv
      w <- mkWeakPtr  dbref . Just $ fixToCache dbref
-     H.update cache key (CacheElem Nothing w)
+     H.insert cache key (CacheElem Nothing w)
      return  dbref
 
 {- | Create the object passed as parameter (if it does not exist) and
@@ -477,7 +477,7 @@ newDBRefIO x= do
      tv<- newTVarIO  DoNotExist
      let dbref= DBRef key  tv
      w <- mkWeakPtr  dbref . Just $ fixToCache dbref
-     H.update cache key (CacheElem Nothing w)
+     H.insert cache key (CacheElem Nothing w)
      t <-  timeInteger
      atomically $ do
        applyTriggers [dbref] [Just x]      --`debug` ("before "++key)
@@ -536,7 +536,7 @@ newDBRef x = do
 --      writeTVar tv   . Exist $ Elem x t t
 --      unsafeIOToSTM $ do
 --        w <- mkWeakPtr dbref . Just $ fixToCache dbref
---        H.update cache key ( CacheElem Nothing w)
+--        H.insert cache key ( CacheElem Nothing w)
 --      return dbref
 
 -- | Delete the content of the DBRef form the cache and from permanent storage
@@ -602,7 +602,7 @@ invalidateKey key=  do
 flushAll :: STM ()
 flushAll = do
  (cache,time) <- unsafeIOToSTM $ readIORef refcache
- elms <- unsafeIOToSTM $ toList cache
+ elms <- unsafeIOToSTM $ H.toList cache
  mapM_ (del cache) elms
  where
  del cache ( _ , CacheElem _ w)= do
@@ -730,7 +730,7 @@ takeDBRef cache flags x =do
                    AddToHash   -> do
                       dbref <- evaluate $ DBRef key  tvr
                       w <- mkWeakPtr  dbref . Just $ fixToCache dbref
-                      H.update cache key (CacheElem (Just dbref) w)
+                      H.insert cache key (CacheElem (Just dbref) w)
                       return $ Just dbref
      -- !> ("readToCache "++ key)
 
@@ -767,7 +767,7 @@ releaseTPVar cache  r =do
 	        applyTriggers [dbref] [Just r]
 	        writeTVar tvr . Exist $ Elem r ti ti
 	        w <- unsafeIOToSTM . mkWeakPtr dbref $ Just $ fixToCache dbref
-	        unsafeIOToSTM $ H.update cache keyr (CacheElem (Just dbref) w)-- accesed and modified XXX
+	        unsafeIOToSTM $ H.insert cache keyr (CacheElem (Just dbref) w)-- accesed and modified XXX
 	        return ()				
 				
 						
@@ -796,7 +796,7 @@ delListFromHash  cache  xs= mapM_ del xs
 
 
 updateListToHash hash kv= mapM (update1 hash) kv where
-	update1 h (k,v)= update h k v
+	update1 h (k,v)= H.insert h k v
 
 
 
@@ -828,7 +828,7 @@ syncCache ::  IO ()
 syncCache  = criticalSection saving $ do
       (cache,lastSync) <- readIORef refcache  --`debug` "syncCache"
       t2<- timeInteger
-      elems <- toList cache
+      elems <- H.toList cache
       (tosave,_,_) <- atomically $ extract elems lastSync
       save tosave
       writeIORef refcache (cache, t2)
@@ -888,7 +888,7 @@ clearSyncCache ::  (Integer -> Integer-> Integer-> Bool)-> Int -> IO ()
 clearSyncCache check sizeObjects= criticalSection saving $ do
       (cache,lastSync) <- readIORef refcache
       t <- timeInteger
-      elems <- toList cache
+      elems <- H.toList cache
       (tosave, elems, size) <- atomically $ extract elems lastSync
       save tosave
       when (size > sizeObjects) $  forkIO (filtercache t cache lastSync elems) >> performGC
@@ -911,7 +911,7 @@ clearSyncCache check sizeObjects= criticalSection saving $ do
     		Exist (Elem x lastAccess _ ) ->
             		 if check t lastAccess lastSync
             		      then do
-                              unsafeIOToSTM . H.update cache key $ CacheElem Nothing w
+                              unsafeIOToSTM . H.insert cache key $ CacheElem Nothing w
                               writeTVar tv NotRead
             		      else return ()
     		_    ->  return()

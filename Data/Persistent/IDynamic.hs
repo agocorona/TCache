@@ -34,7 +34,6 @@ import Control.Concurrent.MVar
 import Data.IORef
 import Data.Map as M(empty)
 import Data.RefSerialize
-import Data.HashTable as HT
 
 --import Debug.Trace
 --(!>)= flip trace

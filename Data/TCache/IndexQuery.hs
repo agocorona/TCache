@@ -102,7 +102,7 @@ import qualified  Data.Map as M
 import System.IO.Unsafe
 import Data.ByteString.Lazy.Char8(pack, unpack)
 
-class ( Read a,  Show a
+class (Read reg, Read a, Show reg, Show a
       , IResource reg,Typeable reg
       , Typeable a,Ord a)
       => Queriable reg a
@@ -143,14 +143,13 @@ setIndexPersist p= writeIORef _indexPersist $ Just p
 
 getIndexPersist=  unsafePerformIO $  readIORef _indexPersist
 
+
 keyIndex treg tv= "index " ++ show treg ++ show tv
 
 instance (Typeable reg, Typeable a) => Indexable (Index reg a) where
    key map= keyIndex typeofreg typeofa
        where
        [typeofreg, typeofa]= typeRepArgs $! typeOf map
-
-
 
 instance (Queriable reg a, Typeable reg, Typeable a) => IResource (Index reg a) where
   keyResource = key

@@ -1,5 +1,5 @@
 name: TCache
-version: 0.10.2.0
+version: 0.10.2.4
 cabal-version: >= 1.6
 build-type: Simple
 license: BSD3
@@ -13,6 +13,9 @@ description: TCache is a transactional cache with configurable persitence. It al
              The package implements serializable STM references, access by key and by record field value, triggers,
              full text and field indexation, default serialization and a query language based on record fields
              .
+             0.10.2.0 added setDefaultPersist and modified the signature of setPersist in Data.TCache.DefaultPersistence.
+             Fixed issues with ghc 7.6.3
+             .
              0.10  version add memoization and a persistent and transactional collection/queue.
              .
              0.10.0.8 subversion add cachedByKeySTM
@@ -23,9 +26,7 @@ description: TCache is a transactional cache with configurable persitence. It al
              .
              In this release:
              .
-             added setDefaultPersist and modified the signature of setPersist in Data.TCache.DefaultPersistence.
-             Fixed issues with ghc 7.6.3
-
+             Dropped Data.Hashtable (deprecated). Now it uses the package hashtables
 
 
 category: Data, Database
@@ -43,7 +44,7 @@ source-repository head
 library
     build-depends: base >=4 && <5, bytestring -any,
                    containers >=0.1.0.1, directory >=1.0, old-time >=1.0,
-                   stm -any, text -any, mtl -any,
+                   stm -any, text -any, mtl -any, hashtables,
                    RefSerialize -any
 
 

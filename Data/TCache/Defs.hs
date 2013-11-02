@@ -101,9 +101,12 @@ The performance of serialization is not critical.
 class Serializable a  where
   serialize   :: a -> B.ByteString
   deserialize :: B.ByteString -> a
+  deserialKey :: String -> B.ByteString -> a
+  deserialKey _ v= deserialize v
   setPersist  :: a -> Maybe Persist              -- ^ `defaultPersist` if Nothing
   setPersist =  const Nothing
 
+type Key= String
 --instance (Show a, Read a)=> Serializable a where
 --  serialize= show
 --  deserialize= read
@@ -112,9 +115,9 @@ class Serializable a  where
 -- | a persist mechanism has to implement these three primitives
 -- 'filePersist' is the default file persistence
 data Persist = Persist{
-       readByKey   ::  (String -> IO(Maybe B.ByteString)) -- ^  read by key. It must be strict
-     , write       ::  (String -> B.ByteString -> IO())   -- ^  write. It must be strict
-     , delete      ::  (String -> IO())}                  -- ^  delete
+       readByKey   ::  (Key -> IO(Maybe B.ByteString)) -- ^  read by key. It must be strict
+     , write       ::  (Key -> B.ByteString -> IO())   -- ^  write. It must be strict
+     , delete      ::  (Key -> IO())}                  -- ^  delete
 
 -- | Implements default persistence of objects in files with their keys as filenames
 filePersist   = Persist
@@ -133,8 +136,10 @@ getDefaultPersist =  unsafePerformIO $ readIORef defaultPersistIORef
 
 getPersist x= unsafePerformIO $ case setPersist x of
      Nothing -> readIORef defaultPersistIORef
-     Just p -> return p
-  `Exception.catch` (\(e:: SomeException) -> error "setPersist must depend on the type, not the value of the parameter: " )
+     Just p  -> return p
+  `Exception.catch` (\(e:: SomeException) -> error $ "setPersist must depend on the type, not the value of the parameter for: "
+                                                         ++  show (typeOf x)
+                                                         ++ "error was:" ++ show e)
 
 
 defaultReadByKey ::   String-> IO (Maybe B.ByteString)
@@ -176,7 +181,7 @@ safeWrite filename str= handle  handler  $ B.writeFile filename str   -- !> ("wr
 defaultDelete :: String -> IO()
 defaultDelete filename =do
      handle (handler filename) $ removeFile filename
-     --print  ("delete "++filename)
+
      where
 
      handler :: String -> IOException -> IO ()
@@ -187,16 +192,16 @@ defaultDelete filename =do
 --            threadDelay 100000   --`debug`"isAlreadyInUseError"
             defaultDelete filename  
        | otherwise = do
-           hPutStrLn stderr $ "defaultDelResource:  " ++ show e ++  " in file: " ++ filename ++ " retrying"
+            hPutStrLn stderr $ "defaultDelResource:  " ++ show e ++  " in file: " ++ filename ++ " retrying"
 --           threadDelay 100000     --`debug` ("otherwise " ++ show e)
-           defaultDelete filename
+            defaultDelete filename
 
 
 
 defReadResourceByKey k= iox where
     iox= do
       let Persist f _ _ = getPersist  x
-      f  file >>=  evaluate . fmap  deserialize
+      f  file >>=  evaluate . fmap  (deserialKey k)
       where
       file= defPath x ++ k
       x= undefined `asTypeOf` (fromJust $ unsafePerformIO iox)
