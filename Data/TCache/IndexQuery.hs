@@ -53,8 +53,7 @@ Will produce:
 NOTES:
 
 * the index is instance of 'Indexable' and 'Serializable'. This can be used to
-persist in the user-defined storoage. If "Data.TCache.FilePersistence" is included
-the indexes will be written in files.
+persist in the user-defined storage using DefaultPersistence
 
 * The Join feature has not been properly tested
 
@@ -72,7 +71,7 @@ fields in a registers are to be indexed, they must have different types.
 
 {-# LANGUAGE  DeriveDataTypeable, MultiParamTypeClasses
 , FunctionalDependencies, FlexibleInstances, UndecidableInstances
-, TypeSynonymInstances, IncoherentInstances #-}
+, TypeSynonymInstances, IncoherentInstances, OverlappingInstances #-}
 module Data.TCache.IndexQuery(
   index
 , (.==.)
@@ -85,9 +84,7 @@ module Data.TCache.IndexQuery(
 , (.&&.)
 , (.||.)
 , select
-, Queriable
-, setIndexPersist
-, getIndexPersist)
+, Queriable)
 where
 
 import Data.TCache
@@ -102,21 +99,22 @@ import qualified  Data.Map as M
 import System.IO.Unsafe
 import Data.ByteString.Lazy.Char8(pack, unpack)
 
+
 class (Read reg, Read a, Show reg, Show a
       , IResource reg,Typeable reg
-      , Typeable a,Ord a)
+      , Typeable a,Ord a,PersistIndex reg)
       => Queriable reg a
 
 instance (Read reg, Read a, Show reg, Show a
       , IResource reg,Typeable reg
-      , Typeable a,Ord a)
+      , Typeable a,Ord a,PersistIndex reg)
       => Queriable reg a
 
---instance  Queriable reg a => IResource (Index reg a) where
---  keyResource = key
---  writeResource =defWriteResource
---  readResourceByKey = defReadResourceByKey
---  delResource = defDelResource
+instance  Queriable reg a => IResource (Index reg a) where
+  keyResource = key
+  writeResource =defWriteResource
+  readResourceByKey = defReadResourceByKey
+  delResource = defDelResource
 
 
 
@@ -128,20 +126,14 @@ instance (IResource reg, Typeable reg, Ord a, Read a)
      = map (\(r,s) -> (Index r, s)) rs where rs= readsPrec n str
   readsPrec _ s= error $ "indexQuery: can not read index: \""++s++"\""
 
-
 instance (Queriable reg a) => Serializable (Index reg a)  where
   serialize= pack . show
   deserialize= read . unpack
-  setPersist= const $ unsafePerformIO $ readIORef _indexPersist
+  setPersist index= persistIndex $ getType index
+    where
+    getType :: Index reg a -> reg
+    getType= undefined -- type level
 
-_indexPersist= unsafePerformIO $ newIORef Nothing
-
--- | Set the default persistence for the indexes
---
--- Must be called before any other TCache sentence
-setIndexPersist p= writeIORef _indexPersist $ Just p
-
-getIndexPersist=  unsafePerformIO $  readIORef _indexPersist
 
 
 keyIndex treg tv= "index " ++ show treg ++ show tv
@@ -150,12 +142,15 @@ instance (Typeable reg, Typeable a) => Indexable (Index reg a) where
    key map= keyIndex typeofreg typeofa
        where
        [typeofreg, typeofa]= typeRepArgs $! typeOf map
-
-instance (Queriable reg a, Typeable reg, Typeable a) => IResource (Index reg a) where
-  keyResource = key
-  writeResource =defWriteResource
-  readResourceByKey = defReadResourceByKey
-  delResource = defDelResource
+--   defPath index= defPath $ ofRegister index
+--       where
+--       ofRegister :: Index reg a -> reg
+--       ofRegister = undefined -- type level
+-- instance (Queriable reg a, Typeable reg, Typeable a) => IResource (Index reg a) where
+--  keyResource = key
+--  writeResource =defWriteResource
+--  readResourceByKey = defReadResourceByKey
+--  delResource = defDelResource
 
 getIndex :: (Queriable reg a)
    => ( reg -> a) -> a -> STM(DBRef (Index reg a), Index reg a,[DBRef reg])

@@ -87,7 +87,6 @@ data IndexText=  IndexText
         , mapDocKeyInt :: M.Map String Int
         , mapIntDocKey :: M.Map Int String
         , mapTextInteger :: M.Map T.Text Integer
-
          } deriving (Typeable)
 
 
@@ -100,7 +99,7 @@ instance Read IndexText  where
 instance Serializable IndexText  where
   serialize= pack . show
   deserialize= read . unpack
-  setPersist= const $ getIndexPersist
+  setPersist=  const Nothing
 
 instance  Indexable IndexText  where
    key (IndexText v _ _ _ _)=    "indextext " ++ v

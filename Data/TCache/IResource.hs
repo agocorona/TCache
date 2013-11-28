@@ -40,11 +40,15 @@ class IResource a where
         while the database access must be strict, the marshaling must be lazy if, as is often the case,
         some parts of the object are not really accesed.
         If the object contains DBRefs, this avoids unnecesary cache lookups.
-        This method is called inside 'atomically' blocks.
+        This method is called within 'atomically' blocks.
         Since STM transactions retry, readResourceByKey may be called twice in strange situations. So it must be idempotent, not only in the result but also in the effect in the database
         . However, because it is executed by 'safeIOToSTM' it is guaranteed that the execution is not interrupted.
         -}
         readResourceByKey :: String -> IO(Maybe a)
+        readResourceByKey k= return . head =<< readResourcesByKey [k]
+        -- | hopefully optimized read of many objects by key.
+        readResourcesByKey :: [String] -> IO [Maybe a]
+        readResourcesByKey = mapM readResourceByKey
 
         -- To allow accesses not by key but by any criteria based on the content of the record fields
         -- included in the -partial- definition of the input record. (it defaults as @readResourceByKey $ keyResource x@)
@@ -60,11 +64,19 @@ class IResource a where
         -- Since there is no provision for rollback from failure in writing to
         -- persistent storage, 'writeResource' must retry until success.
     	writeResource:: a-> IO()
+    	writeResource r= writeResources [r]
+    	
+    	-- | multiple write (hopefully) in a single request. That is up to you and your backend
+    	-- . Defined by default as 'mapM_ writeResource'
+    	writeResources :: [a] -> IO()
+    	writeResources= mapM_ writeResource
 
-        -- | Delete the resource. It is called syncronously. So it must tocommit   
+        -- | Delete the resource. It is called syncronously. So it must commit   
     	delResource:: a-> IO()
-
-
+    	delResource x= delResources [x]
+    	
+        delResources :: [a] -> IO()
+        delResources= mapM_ delResource
 -- | Resources data definition used by 'withSTMResources'    
 data Resources a b
        = Retry             -- ^ forces a retry

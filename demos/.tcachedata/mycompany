@@ -1,0 +1,1 @@
+Company {cname = "mycompany", personnel = [DBRef "Emp1",DBRef "Emp2",DBRef "Emp3",DBRef "Emp4"], other = Other "blah blah blah"}

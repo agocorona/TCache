@@ -101,10 +101,16 @@ The performance of serialization is not critical.
 class Serializable a  where
   serialize   :: a -> B.ByteString
   deserialize :: B.ByteString -> a
+  deserialize= error "No deserialization defined for your data"
   deserialKey :: String -> B.ByteString -> a
   deserialKey _ v= deserialize v
   setPersist  :: a -> Maybe Persist              -- ^ `defaultPersist` if Nothing
   setPersist =  const Nothing
+
+-- |  Used by IndexQuery for index persistence(see "Data.TCache.IndexQuery".
+class PersistIndex a where
+   persistIndex :: a -> Maybe Persist
+
 
 type Key= String
 --instance (Show a, Read a)=> Serializable a where

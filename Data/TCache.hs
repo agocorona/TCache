@@ -133,6 +133,7 @@ DBRef's and @*Resource(s)@ primitives are completely interoperable. The latter o
 ,newDBRef
 --,newDBRefIO
 ,readDBRef
+,readDBRefs
 ,writeDBRef
 ,delDBRef
 
@@ -379,13 +380,44 @@ readDBRef dbref@(DBRef key  tv)= do
        return $ Just x
    DoNotExist -> return $ Nothing
    NotRead ->  do
-     r <-   safeIOToSTM $ readResourceByKey key
-     case r of
-       Nothing -> writeTVar tv DoNotExist >> return Nothing
-       Just x  -> do
+       r <- safeIOToSTM $ readResourceByKey key
+       case r of
+         Nothing -> writeTVar tv DoNotExist >> return Nothing
+         Just x  -> do
            t <- unsafeIOToSTM timeInteger
-           writeTVar tv $ Exist $ Elem  x t t
+           writeTVar tv $ Exist $ Elem  x t (-1)
            return $ Just  x
+
+-- | Read multiple DBRefs in a single request using the new 'readResourcesByKey'
+readDBRefs :: (IResource a, Typeable a)  => [DBRef a] -> STM [(Maybe a)]
+readDBRefs dbrefs= do
+  let mf (DBRef key  tv)= do
+      r <- readTVar tv
+      case r of
+        Exist (Elem x _ mt) -> do
+          t <- unsafeIOToSTM timeInteger
+          writeTVar tv  . Exist $ Elem x t mt
+          return $ Right $ Just x
+        DoNotExist -> return $ Right Nothing
+        NotRead ->  return $ Left key
+  inCache <- mapM mf dbrefs
+  let pairs = foldr(\pair@(x,dbr) xs -> case x of Left k -> pair:xs; _ -> xs ) [] $ zip inCache dbrefs
+  let (toReadKeys, dbrs) = unzip pairs
+  let fromLeft (Left k)= k
+      formLeft _ = error "this will never happen"
+  rs <- safeIOToSTM . readResourcesByKey $ map fromLeft toReadKeys
+  let processTVar (r, DBRef key  tv)= do
+           case r of
+             Nothing -> writeTVar tv DoNotExist
+             Just x  -> do
+               t <- unsafeIOToSTM timeInteger
+               writeTVar tv $ Exist $ Elem  x t (-1)
+
+  mapM_ processTVar $ zip rs dbrs
+  let mix (Right x:xs) ys   = x:mix xs ys
+      mix (Left _:xs) (y:ys)= y:mix xs ys
+
+  return $ mix inCache rs
 
 -- | Write in the reference a value
 -- The new key must be the same than the old key of the previous object stored
@@ -715,7 +747,8 @@ takeDBRef cache flags x =do
             Just dbref -> return . Just $! castErr dbref
             Nothing -> unsafeIOToSTM (finalize w)  >> takeDBRef cache flags x
        Nothing   -> do
-           safeIOToSTM $ readToCache flags cache  keyr -- unsafeIOToSTM $ readResourceByKey keyr
+           safeIOToSTM $ readToCache flags cache  keyr
+              -- unsafeIOToSTM $ readResourceByKey keyr
 
    where
    readToCache flags cache key= do
@@ -724,7 +757,7 @@ takeDBRef cache flags x =do
             Nothing -> return Nothing
             Just r2 -> do
                ti  <-   timeInteger
-               tvr <-   newTVarIO . Exist $ Elem r2 ti ti
+               tvr <-   newTVarIO . Exist $ Elem r2 ti (-1)
                case flags of
                    NoAddToHash -> return . Just $ DBRef key  tvr
                    AddToHash   -> do
