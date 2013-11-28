@@ -42,9 +42,8 @@ extra-source-files: demos/DBRef.hs
                     demos/basicSample.hs
                     demos/caching.hs
                     demos/triggerRelational.lhs
-                    demos/memoization
-                    demos/triggerRelational.hs
-                    demos/DBRefs
+                    demos/memoization.hs
+                    demos/DBRef.hs
 
 source-repository head
     type: git
