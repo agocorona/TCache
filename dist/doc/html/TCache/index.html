@@ -1,12 +1,18 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /><title>TCache-0.11.0.0: A Transactional cache with user-defined persistence</title><link href="ocean.css" rel="stylesheet" type="text/css" title="Ocean" /><script src="haddock-util.js" type="text/javascript"></script><script type="text/javascript">//<![CDATA[
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /><title>TCache-0.12.0: A Transactional cache with user-defined persistence</title><link href="ocean.css" rel="stylesheet" type="text/css" title="Ocean" /><script src="haddock-util.js" type="text/javascript"></script><script type="text/javascript">//<![CDATA[
 window.onload = function () {pageLoad();};
 //]]>
-</script></head><body><div id="package-header"><ul class="links" id="page-menu"><li><a href="index.html">Contents</a></li><li><a href="doc-index.html">Index</a></li></ul><p class="caption">TCache-0.11.0.0: A Transactional cache with user-defined persistence</p></div><div id="content"><div id="description"><h1>TCache-0.11.0.0: A Transactional cache with user-defined persistence</h1><div class="doc"><p>TCache is a transactional cache with configurable persitence. It allows conventional
+</script></head><body><div id="package-header"><ul class="links" id="page-menu"><li><a href="index.html">Contents</a></li><li><a href="doc-index.html">Index</a></li></ul><p class="caption">TCache-0.12.0: A Transactional cache with user-defined persistence</p></div><div id="content"><div id="description"><h1>TCache-0.12.0: A Transactional cache with user-defined persistence</h1><div class="doc"><p>TCache is a transactional cache with configurable persitence. It allows conventional
 STM transactions for objects that syncronize  with their user-defined storages.
 State in memory and into permanent storage is transactionally coherent.
+</p><p>It has interface defined for Amazon WS and Yesod Persistent backends defined in tcache-<a href="backend">backend</a>
+packages.
+Persistent is a multi-backend interface for SQL and non SQL databases such in Mongo-db
 </p><p>The package implements serializable STM references, access by key and by record field value, triggers,
 full text and field indexation, default serialization and a query language based on record fields
-</p><ol><li>11.0.0 started the addition of readDBRefs, readResources and so on for simultaneous read, writes and deletes of
+</p><ol><li>12.0 space in index data in indexQuery.hs and IndexText.hs triggered errors in the AWS backend.
+The space has been changed by <code>-</code>. So rename the <a href="index *.html">index *</a> files in the TCache folder
+in order to be recognized.
+</li><li>11.0.0 added setIndexParsist to define persistence for indexes by type. started the addition of readDBRefs, readResources and so on for simultaneous read, writes and deletes of
 objects of the same type.
 </li><li>10.2.0 Added setDefaultPersist and modified the signature of setPersist in Data.TCache.DefaultPersistence.
 Fixed issues with ghc 7.6.3

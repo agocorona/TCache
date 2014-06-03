@@ -1,5 +1,5 @@
 name: TCache
-version: 0.11.0.0
+version: 0.12.0
 cabal-version: >= 1.6
 build-type: Simple
 license: BSD3
@@ -10,8 +10,19 @@ description: TCache is a transactional cache with configurable persitence. It al
              STM transactions for objects that syncronize  with their user-defined storages.
              State in memory and into permanent storage is transactionally coherent.
              .
+             It has interface defined for Amazon WS and Yesod Persistent backends defined in tcache-<backend>
+             packages.
+             Persistent is a multi-backend interface for SQL and non SQL databases such in Mongo-db
+             .
              The package implements serializable STM references, access by key and by record field value, triggers,
              full text and field indexation, default serialization and a query language based on record fields
+             .
+             Since the STM references can be included in data structures and serialized, this is right
+             for graph databases and other NoSQL databases.
+             .
+             0.12.0 space in index data in indexQuery.hs and IndexText.hs triggered errors in the AWS backend.
+             The space has been changed by '-'. So rename the "index *" files in the TCache folder
+             in order to be recognized.
              .
              0.11.0.0 added setIndexParsist to define persistence for indexes by type. started the addition of readDBRefs, readResources and so on for simultaneous read, writes and deletes of
              objects of the same type.

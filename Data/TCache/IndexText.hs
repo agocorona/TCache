@@ -102,7 +102,7 @@ instance Serializable IndexText  where
   setPersist=  const Nothing
 
 instance  Indexable IndexText  where
-   key (IndexText v _ _ _ _)=    "indextext " ++ v
+   key (IndexText v _ _ _ _)=    "indextext-" ++ v
 
 instance IResource IndexText where
   keyResource = key

@@ -92,8 +92,8 @@ serialization/deserialization are not performance critical in TCache
 
 Read, Show,  instances are implicit instances of Serializable
 
->    serialize  = show
->    deserialize= read
+>    serialize  = pack . show
+>    deserialize= read . unpack
 
 Since write and read to disk of to/from the cache are not be very frequent
 The performance of serialization is not critical.
@@ -125,7 +125,7 @@ data Persist = Persist{
      , write       ::  (Key -> B.ByteString -> IO())   -- ^  write. It must be strict
      , delete      ::  (Key -> IO())}                  -- ^  delete
 
--- | Implements default persistence of objects in files with their keys as filenames
+-- | Implements default default-persistence of objects in files with their keys as filenames
 filePersist   = Persist
     {readByKey= defaultReadByKey
     ,write    = defaultWrite
@@ -133,7 +133,8 @@ filePersist   = Persist
 
 defaultPersistIORef = unsafePerformIO $ newIORef  filePersist
 
--- | Set the default persistence mechanism of all 'serializable' objetcts. By default it is 'filePersist'
+-- | Set the default persistence mechanism of all 'serializable' objects that have
+-- @setPersist= const Nothing@. By default it is 'filePersist'
 --
 -- this statement must be the first one before any other TCache call
 setDefaultPersist p= writeIORef defaultPersistIORef p

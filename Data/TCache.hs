@@ -341,7 +341,7 @@ refcache =unsafePerformIO $ newCache >>= newIORef
 -- |   Creates a new cache. Experimental
 newCache  :: IO (Ht , Integer)
 newCache =do
-        c <- H.new -- (==) H.hashString
+        c <- H.new  -- (==) H.hashString
         return (c,0)
 
 -- | Return the  total number of DBRefs in the cache. For debug purposes.
@@ -473,9 +473,11 @@ getDBRef key=   unsafePerformIO $! getDBRef1 $! key where
  getDBRef1 :: (Typeable a, IResource a) =>  String -> IO (DBRef a)
  getDBRef1 key = do
   (cache,_) <-  readIORef refcache   -- !> ("getDBRef "++ key)
+  takeMVar getRefFlag
   r <- H.lookup cache  key
   case r of
    Just (CacheElem  mdb w) -> do
+     putMVar getRefFlag ()
      mr <-  deRefWeak w
      case mr of
         Just dbref@(DBRef _ tv) ->
@@ -487,11 +489,14 @@ getDBRef key=   unsafePerformIO $! getDBRef1 $! key where
         Nothing -> finalize w >>  getDBRef1 key          -- !> "finalize"  -- the weak pointer has not executed his finalizer
 
    Nothing -> do
-     tv<- newTVarIO NotRead                              -- !> "Nothing"
+     tv <- newTVarIO NotRead                              -- !> "Nothing"
      dbref <- evaluate $ DBRef key  tv
      w <- mkWeakPtr  dbref . Just $ fixToCache dbref
      H.insert cache key (CacheElem Nothing w)
+     putMVar getRefFlag ()
      return  dbref
+
+getRefFlag= unsafePerformIO $ newMVar ()
 
 {- | Create the object passed as parameter (if it does not exist) and
 -- return its reference in the IO monad.

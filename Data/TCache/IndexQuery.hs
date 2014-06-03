@@ -100,12 +100,12 @@ import System.IO.Unsafe
 import Data.ByteString.Lazy.Char8(pack, unpack)
 
 
-class (Read reg, Read a, Show reg, Show a
+class (Read a,  Show a
       , IResource reg,Typeable reg
       , Typeable a,Ord a,PersistIndex reg)
       => Queriable reg a
 
-instance (Read reg, Read a, Show reg, Show a
+instance (Read a,  Show a
       , IResource reg,Typeable reg
       , Typeable a,Ord a,PersistIndex reg)
       => Queriable reg a
@@ -136,7 +136,7 @@ instance (Queriable reg a) => Serializable (Index reg a)  where
 
 
 
-keyIndex treg tv= "index " ++ show treg ++ show tv
+keyIndex treg tv= "index-" ++ show treg ++ show tv
 
 instance (Typeable reg, Typeable a) => Indexable (Index reg a) where
    key map= keyIndex typeofreg typeofa
