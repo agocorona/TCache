@@ -6,11 +6,11 @@ license: BSD3
 license-file: LICENSE
 maintainer: agocorona@gmail.com
 synopsis: A Transactional cache with user-defined persistence
-description: TCache is a transactional cache with configurable persitence. It allows conventional
-             STM transactions for objects that syncronize  with their user-defined storages.
+description: TCache is a transactional cache with configurable persistence. It allows conventional
+             STM transactions for objects that synchronize  with their user-defined storages.
              State in memory and into permanent storage is transactionally coherent.
              .
-             It has interface defined for Amazon WS and Yesod Persistent backends defined in tcache-<backend>
+             It has interface defined for Amazon WS and Yesod Persistent backends defined in tcache-\<backend\>
              packages.
              Persistent is a multi-backend interface for SQL and non SQL databases such in Mongo-db
              .
@@ -21,7 +21,7 @@ description: TCache is a transactional cache with configurable persitence. It al
              for graph databases and other NoSQL databases.
              .
              0.12.0 space in index data in indexQuery.hs and IndexText.hs triggered errors in the AWS backend.
-             The space has been changed by '-'. So rename the "index *" files in the TCache folder
+             The space has been changed by \'-\'. So rename the "index *" files in the TCache folder
              in order to be recognized.
              .
              0.11.0.0 added setIndexParsist to define persistence for indexes by type. started the addition of readDBRefs, readResources and so on for simultaneous read, writes and deletes of
@@ -34,7 +34,7 @@ description: TCache is a transactional cache with configurable persitence. It al
              .
              0.10.0.8 subversion add cachedByKeySTM
              .
-             0.10.0.9 fixed an error in clearSyncChacheProc and SynWrite Asyncronous that checked the cache continuously
+             0.10.0.9 fixed an error in clearSyncCacheProc and SynWrite Asynchronous that checked the cache continuously
              .
              See "Data.TCache" for details
              .
