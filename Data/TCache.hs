@@ -713,7 +713,7 @@ getResource r= do{mr<- getResources [r];return $! head mr}
 getResources:: (IResource a, Typeable a)=>[a]-> IO [Maybe a]
 getResources rs= atomically $ withSTMResources rs f1 where
   f1 mrs= Resources  [] [] mrs
-		
+
 
 -- | Delete the   resource from cache and from persistent storage.
 --
@@ -781,33 +781,33 @@ releaseTPVars rs cache = mapM_  (releaseTPVar cache)  rs
 
 releaseTPVar :: (IResource a,Typeable a)=>  Ht -> a  -> STM ()
 releaseTPVar cache  r =do
-	c <- unsafeIOToSTM $ H.lookup cache keyr
-	case c of
-	    Just  (CacheElem    _ w) -> do
-	        mr <-  unsafeIOToSTM $ deRefWeak w
-	        case mr of
-	            Nothing -> unsafeIOToSTM (finalize w) >> releaseTPVar cache  r		
-	            Just dbref@(DBRef key  tv) -> do
-	            applyTriggers [dbref] [Just (castErr r)]
+        c <- unsafeIOToSTM $ H.lookup cache keyr
+        case c of
+            Just  (CacheElem    _ w) -> do
+                mr <-  unsafeIOToSTM $ deRefWeak w
+                case mr of
+                    Nothing -> unsafeIOToSTM (finalize w) >> releaseTPVar cache  r
+                    Just dbref@(DBRef key  tv) -> do
+                    applyTriggers [dbref] [Just (castErr r)]
                     t <- unsafeIOToSTM  timeInteger
-                    writeTVar tv . Exist  $ Elem  (castErr r)  t t	
-				
-
-	    Nothing   ->  do
-	        ti  <- unsafeIOToSTM timeInteger
-	        tvr <- newTVar NotRead
-	        dbref <- unsafeIOToSTM . evaluate $ DBRef keyr  tvr
-	        applyTriggers [dbref] [Just r]
-	        writeTVar tvr . Exist $ Elem r ti ti
-	        w <- unsafeIOToSTM . mkWeakPtr dbref $ Just $ fixToCache dbref
-	        unsafeIOToSTM $ H.insert cache keyr (CacheElem (Just dbref) w)-- accesed and modified XXX
-	        return ()				
-				
-						
-	where 	keyr= keyResource r
+                    writeTVar tv . Exist  $ Elem  (castErr r)  t t
 
 
-		
+            Nothing   ->  do
+                ti  <- unsafeIOToSTM timeInteger
+                tvr <- newTVar NotRead
+                dbref <- unsafeIOToSTM . evaluate $ DBRef keyr  tvr
+                applyTriggers [dbref] [Just r]
+                writeTVar tvr . Exist $ Elem r ti ti
+                w <- unsafeIOToSTM . mkWeakPtr dbref $ Just $ fixToCache dbref
+                unsafeIOToSTM $ H.insert cache keyr (CacheElem (Just dbref) w)-- accesed and modified XXX
+                return ()
+
+
+        where keyr= keyResource r
+
+
+
 
 delListFromHash :: IResource a => Ht -> [a] -> STM ()
 delListFromHash  cache  xs= mapM_ del xs
@@ -829,7 +829,7 @@ delListFromHash  cache  xs= mapM_ del xs
 
 
 updateListToHash hash kv= mapM (update1 hash) kv where
-	update1 h (k,v)= H.insert h k v
+        update1 h (k,v)= H.insert h k v
 
 
 
@@ -847,8 +847,8 @@ clearSyncCacheProc  time check sizeObjects= forkIO  clear
  clear = do
      threadDelay $ time * 1000000
      handle ( \ (e :: SomeException)-> hPutStr stderr (show e) >> clear ) $ do
-    	clearSyncCache   check sizeObjects                                        -- !>  "CLEAR"
-    	clear
+            clearSyncCache   check sizeObjects                                        -- !>  "CLEAR"
+            clear
 
 criticalSection mv f= bracket
   (takeMVar mv)
@@ -932,7 +932,7 @@ clearSyncCache check sizeObjects= criticalSection saving $ do
 
         -- delete elems from the cache according with the checking criteria
   filtercache t cache lastSync elems= mapM_ filter elems
-    where	
+    where
     filter (CacheElem Nothing w)= return()  --alive because the dbref is being referenced elsewere
     filter (CacheElem (Just (DBRef key _)) w) = do
      mr <-  deRefWeak w
@@ -941,13 +941,13 @@ clearSyncCache check sizeObjects= criticalSection saving $ do
        Just (DBRef _  tv) -> atomically $ do
          r <- readTVar tv
          case r of
-    		Exist (Elem x lastAccess _ ) ->
-            		 if check t lastAccess lastSync
-            		      then do
+                    Exist (Elem x lastAccess _ ) ->
+                             if check t lastAccess lastSync
+                              then do
                               unsafeIOToSTM . H.insert cache key $ CacheElem Nothing w
                               writeTVar tv NotRead
-            		      else return ()
-    		_    ->  return()
+                                  else return ()
+                    _    ->  return()
 
 
 
@@ -962,8 +962,8 @@ defaultCheck
        -> Integer    -- ^ last cache syncronization (with the persisten storage)
        -> Bool       -- ^ return true for all the elems not accesed since half the time between now and the last sync
 defaultCheck  now lastAccess lastSync
-	| lastAccess > halftime = False
-	| otherwise  = True
+        | lastAccess > halftime = False
+        | otherwise  = True
 
     where
     halftime= now- (now-lastSync) `div` 2
@@ -1002,9 +1002,9 @@ extract elems lastSave= filter1 [] [] (0:: Int)  elems
           r <- readTVar tvr
           case r of
             Exist (Elem r _ modTime) ->
-        	  if (modTime >= lastSave)
-        	    then filter1 (Filtered r:sav) tofilter (n+1) rest
-        	    else filter1 sav tofilter (n+1) rest -- !> ("rejected->" ++ keyResource r)
+                  if (modTime >= lastSave)
+                    then filter1 (Filtered r:sav) tofilter (n+1) rest
+                    else filter1 sav tofilter (n+1) rest -- !> ("rejected->" ++ keyResource r)
 
             _ -> filter1 sav tofilter (n+1) rest
 

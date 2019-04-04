@@ -54,11 +54,19 @@ myCompanyRef= unsafePerformIO . atomically $  do
 
 
 increaseSalaries percent= do
-  Just mycompany <- readDBRef myCompanyRef
-  mapM_  (increase percent ) $ personnel  mycompany
+  mycompany' <- readDBRef myCompanyRef
+  mycompany <- case mycompany' of
+    Just x -> pure x
+    Nothing -> error "Boom"
+
+  mapM_  (increase percent ) $ personnel mycompany
   where
   increase percent ref= do
-    Just emp <- readDBRef ref
+    emp' <- readDBRef ref
+    emp <- case emp' of
+      Just x -> pure x
+      Nothing -> error "Boom"
+
     writeDBRef ref $ emp{salary= salary emp * factor}
     where
     factor= 1+ percent/ 100
@@ -108,7 +116,7 @@ main= do
 
   putStrLn "checking race condition on cache cleaning"
 
-  let emp1=  Emp{ename="Emp1"}
+  let emp1=  Emp{ename="Emp1", salary=(-1)}
   let key= keyResource emp1
   let remp1 = getDBRef key
   Just emp1 <- atomically $ readDBRef remp1
@@ -118,6 +126,7 @@ main= do
 
   putStrLn "must reflect the salary 0 for emp1"
   printSalaries myCompanyRef2
+
 
 
 

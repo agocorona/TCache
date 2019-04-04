@@ -1,0 +1,6 @@
+.tcachedata
+.stack-work
+*.hi
+*.o
+demos/bin/*
+demos/.build

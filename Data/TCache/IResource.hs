@@ -16,23 +16,23 @@ import Data.List(isInfixOf)
 
 {- | Must be defined for every object to be cached.
 -}
-class IResource a where 
-        {- The `keyResource string must be a unique  since this is used to index it in the hash table. 
+class IResource a where
+        {- The `keyResource string must be a unique  since this is used to index it in the hash table.
         when accessing a resource, the user must provide a partial object for wich the key can be obtained.
         for example:
-        
+
         @data Person= Person{name, surname:: String, account :: Int ....)
-        
+
         keyResource Person n s ...= n++s@
-        
+
         the data being accesed must define the fields used by keyResource. For example
 
          @  readResource Person {name="John", surname= "Adams"}@
-        
+
         leaving the rest of the fields undefined
 
         when using default file persistence, the key is used as file name. so it must contain valid filename characters
-        
+
         -}
         keyResource :: a -> String             -- ^ must be defined
 
@@ -55,7 +55,7 @@ class IResource a where
         readResource :: a -> IO (Maybe a)
         readResource x = readResourceByKey $ keyResource x
 
-        -- | To write into persistent storage. It must be strict.  
+        -- | To write into persistent storage. It must be strict.
         -- Since STM transactions may retry, @writeResource@ must be idempotent, not only in the result but also in the effect in the database.
         -- . However, because it is executed by 'safeIOToSTM' it is guaranteed that the execution is not interrupted.
         -- All the new obbects are writeen to the database on synchromization,
@@ -63,21 +63,21 @@ class IResource a where
         -- Commit code must be located in the postcondition. (see  `setConditions`)
         -- Since there is no provision for rollback from failure in writing to
         -- persistent storage, 'writeResource' must retry until success.
-    	writeResource:: a-> IO()
-    	writeResource r= writeResources [r]
-    	
-    	-- | multiple write (hopefully) in a single request. That is up to you and your backend
-    	-- . Defined by default as 'mapM_ writeResource'
-    	writeResources :: [a] -> IO()
-    	writeResources= mapM_ writeResource
+        writeResource:: a-> IO()
+        writeResource r= writeResources [r]
 
-        -- | Delete the resource. It is called syncronously. So it must commit   
-    	delResource:: a-> IO()
-    	delResource x= delResources [x]
-    	
+        -- | multiple write (hopefully) in a single request. That is up to you and your backend
+        -- . Defined by default as 'mapM_ writeResource'
+        writeResources :: [a] -> IO()
+        writeResources= mapM_ writeResource
+
+        -- | Delete the resource. It is called syncronously. So it must commit
+        delResource:: a-> IO()
+        delResource x= delResources [x]
+
         delResources :: [a] -> IO()
         delResources= mapM_ delResource
--- | Resources data definition used by 'withSTMResources'    
+-- | Resources data definition used by 'withSTMResources'
 data Resources a b
        = Retry             -- ^ forces a retry
        | Resources
@@ -145,10 +145,10 @@ defaultReadResource x= defaultReadResourceByKey $ key x
 defaultReadResourceByKey :: (Serializable a, Indexable a) =>  String-> IO (Maybe a)
 defaultReadResourceByKey k= iox
      where
-     iox = handle handler $ do   
-             s <-  readFileStrict  filename :: IO String 
+     iox = handle handler $ do
+             s <-  readFileStrict  filename :: IO String
              return $ Just (deserialize s )                                                         -- `debug` ("read "++ filename)
-     
+
      filename=  defPathIO iox  ++ k
 
      defPathIO :: (Serializable a, Indexable a)=> IO (Maybe a) -> String
@@ -156,15 +156,15 @@ defaultReadResourceByKey k= iox
        where
        Just x= unsafePerformIO $ (return $ Just undefined)  `asTypeOf`  iox
 
- 
+
      handler :: (Serializable a, Indexable a) =>   IOError ->  IO (Maybe a)
      handler  e
-      | isAlreadyInUseError e = defaultReadResourceByKey  k                         
+      | isAlreadyInUseError e = defaultReadResourceByKey  k
       | isDoesNotExistError e = return Nothing
       | otherwise= if ("invalid" `isInfixOf` ioeGetErrorString e)
          then
             error $ ( "readResource: " ++ show e) ++ " defPath and/or keyResource are not suitable for a file path"
-              
+
          else defaultReadResourceByKey  k
 
 
@@ -174,16 +174,16 @@ defaultWriteResource x= safeWrite filename (serialize x)   --  `debug` ("write "
   filename= defPath x ++ key x
 
 safeWrite filename str= handle  handler  $ writeFile filename str
-     where          
+     where
      handler  (e :: IOError)
-       | isDoesNotExistError e=do 
+       | isDoesNotExistError e=do
                   createDirectoryIfMissing True $ take (1+(last $ elemIndices '/' filename)) filename   --maybe the path does not exist
-                  safeWrite filename str               
+                  safeWrite filename str
 
        | otherwise =do
                 --phPutStrLn stderr $ "defaultWriteResource:  " ++ show e ++  " in file: " ++ filename ++ " retrying"
                 safeWrite filename str
-              
+
 defaultDelResource :: (Indexable a) => a -> IO()
 defaultDelResource x=  handle (handler filename) $ removeFile filename  --`debug` ("delete "++filename)
      where
@@ -194,7 +194,7 @@ defaultDelResource x=  handle (handler filename) $ removeFile filename  --`debug
        | isAlreadyInUseError e= do
             --hPutStrLn stderr $ "defaultDelResource: busy"  ++  " in file: " ++ filename ++ " retrying"
             threadDelay 1000000
-            defaultDelResource x   
+            defaultDelResource x
        | otherwise = do
            --hPutStrLn stderr $ "defaultDelResource:  " ++ show e ++  " in file: " ++ filename ++ " retrying"
            threadDelay 1000000
@@ -209,9 +209,9 @@ readFileStrict f = openFile f ReadMode >>= \ h -> readIt h `finally` hClose h
   readIt h= do
       s   <- hFileSize h
       let n= fromIntegral s
-      str <- replicateM n (hGetChar h) 
+      str <- replicateM n (hGetChar h)
       return str
-    
+
 
 newtype Transient a= Transient a
 
