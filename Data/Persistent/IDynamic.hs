@@ -1,5 +1,4 @@
     {-# OPTIONS -XExistentialQuantification
-            -XOverlappingInstances
             -XUndecidableInstances
             -XScopedTypeVariables
             -XDeriveDataTypeable
@@ -121,14 +120,14 @@ serializedEqual (IDyn r) str= unsafePerformIO $ do
   case t of
    DRight x -> return $ runW (showp x) == str   -- !> ("R "++ (show $ unpack $ runW (showp x)))
    DLeft (str', _) -> return $ str== str'       -- !> ("L "++ (show $ unpack str' ))
-  
+
 fromIDyn :: (Typeable a , Serialize a)=> IDynamic -> a
 fromIDyn x= case safeFromIDyn x of
           Left  s -> error s
           Right v -> v
 
 
-safeFromIDyn :: (Typeable a, Serialize a) => IDynamic -> Either String a       
+safeFromIDyn :: (Typeable a, Serialize a) => IDynamic -> Either String a
 safeFromIDyn (d@(IDyn r))= final where
  final= unsafePerformIO $ do
   t <- readIORef r

@@ -27,3 +27,8 @@ userRegister user password  = atomically $ newDBRef $ User user password
 instance (Show a, Read a)=> Serializable a where
   serialize= pack . show
   deserialize= read . unpack
+
+main :: IO ()
+main = do
+   userRegister "test" "12345678"
+   print "(WIP)"

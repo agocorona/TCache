@@ -78,7 +78,7 @@ library
 
     exposed: True
     buildable: True
-    extensions: OverlappingInstances UndecidableInstances
+    extensions: UndecidableInstances
                 ScopedTypeVariables DeriveDataTypeable
     hs-source-dirs: .
     other-modules:

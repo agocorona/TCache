@@ -71,7 +71,7 @@ fields in a registers are to be indexed, they must have different types.
 
 {-# LANGUAGE  DeriveDataTypeable, MultiParamTypeClasses
 , FunctionalDependencies, FlexibleInstances, UndecidableInstances
-, TypeSynonymInstances, IncoherentInstances, OverlappingInstances #-}
+, TypeSynonymInstances, IncoherentInstances #-}
 module Data.TCache.IndexQuery(
   index
 , (.==.)
