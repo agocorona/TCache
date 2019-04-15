@@ -19,6 +19,10 @@ data  Data=   User{uname::String, uid::String, spent:: Int} |
               deriving (Read, Show, Typeable)
 
 
+-- defining prototypes to make missing-fields warning useful again
+user_ = User{uname = undefined, uid = undefined, spent = undefined }
+item_ = Item{iname = undefined, iid = undefined, price = undefined, stock = undefined }
+
 -- The mappings between the cache and the phisical storage are defined by the interface IResource
 --      to extract the unique key,
 --      to serializa to string
@@ -68,12 +72,12 @@ main= do
         --11 PCs are charged  to the John´s account in paralel, to show transactionality
         --because there are only 10 PCs in stock, the last thread must return an error
 
-        for 11 $ forkIO $ User{uid="U12345"} `buy` Item{iid="I54321"}
+        for 11 $ forkIO $ user_{uid="U12345"} `buy` item_{iid="I54321"}
 
         --wait 1 seconds
         threadDelay 1000000
 
-        [us,it] <-  getResources [User{uid="U12345"}, Item{iid="I54321"}]
+        [us,it] <-  getResources [user_{uid="U12345"}, item_{iid="I54321"}]
 
         putStrLn $  "user data=" ++ show us
         putStrLn $  "item data=" ++ show it

@@ -63,7 +63,7 @@ source-repository head
 library
     build-depends: base >=4 && <5, bytestring -any,
                    containers >=0.1.0.1, directory >=1.0, old-time >=1.0,
-                   stm -any, text -any, mtl -any, hashtables,
+                   stm -any, text -any, mtl -any, hashtables, hashable,
                    RefSerialize -any
 
 

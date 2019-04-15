@@ -103,7 +103,7 @@ class Serializable a  where
   deserialize :: B.ByteString -> a
   deserialize= error "No deserialization defined for your data"
   deserialKey :: String -> B.ByteString -> a
-  deserialKey _ v= deserialize v
+  deserialKey _ = deserialize
   setPersist  :: a -> Maybe Persist              -- ^ `defaultPersist` if Nothing
   setPersist =  const Nothing
 
@@ -121,9 +121,9 @@ type Key= String
 -- | a persist mechanism has to implement these three primitives
 -- 'filePersist' is the default file persistence
 data Persist = Persist{
-       readByKey   ::  (Key -> IO(Maybe B.ByteString)) -- ^  read by key. It must be strict
-     , write       ::  (Key -> B.ByteString -> IO())   -- ^  write. It must be strict
-     , delete      ::  (Key -> IO())}                  -- ^  delete
+       readByKey   ::  Key -> IO(Maybe B.ByteString) -- ^  read by key. It must be strict
+     , write       ::  Key -> B.ByteString -> IO()   -- ^  write. It must be strict
+     , delete      ::  Key -> IO()}                  -- ^  delete
 
 -- | Implements default default-persistence of objects in files with their keys as filenames
 filePersist   = Persist
@@ -131,6 +131,7 @@ filePersist   = Persist
     ,write    = defaultWrite
     ,delete   = defaultDelete}
 
+{-# NOINLINE defaultPersistIORef #-}
 defaultPersistIORef = unsafePerformIO $ newIORef  filePersist
 
 -- | Set the default persistence mechanism of all 'serializable' objects that have
@@ -139,6 +140,7 @@ defaultPersistIORef = unsafePerformIO $ newIORef  filePersist
 -- this statement must be the first one before any other TCache call
 setDefaultPersist p= writeIORef defaultPersistIORef p
 
+{-# NOINLINE getDefaultPersist #-}
 getDefaultPersist =  unsafePerformIO $ readIORef defaultPersistIORef
 
 getPersist x= unsafePerformIO $ case setPersist x of
@@ -178,7 +180,7 @@ safeWrite filename str= handle  handler  $ B.writeFile filename str   -- !> ("wr
                   safeWrite filename str               
 
 
-       | otherwise= if ("invalid" `isInfixOf` ioeGetErrorString e)
+       | otherwise= if "invalid" `isInfixOf` ioeGetErrorString e
              then
                 error  $ "defaultWriteResource: " ++ show e ++ " defPath and/or keyResource are not suitable for a file path: "++ filename
              else do
@@ -186,7 +188,7 @@ safeWrite filename str= handle  handler  $ B.writeFile filename str   -- !> ("wr
                 safeWrite filename str
               
 defaultDelete :: String -> IO()
-defaultDelete filename =do
+defaultDelete filename =
      handle (handler filename) $ removeFile filename
 
      where

@@ -330,8 +330,9 @@ data CheckTPVarFlags= AddToHash | NoAddToHash
 setCache :: Cache -> IO()
 setCache ref = readIORef ref >>= \ch -> writeIORef refcache ch
 
--- | The cache holder. stablished by default
+-- | The cache holder. established by default
 refcache :: Cache
+{-# NOINLINE refcache #-}
 refcache =unsafePerformIO $ newCache >>= newIORef
 
 -- |   Creates a new cache. Experimental
@@ -712,7 +713,7 @@ getResource r= do{mr<- getResources [r];return $! head mr}
 {-# INLINE getResources #-}
 getResources:: (IResource a, Typeable a)=>[a]-> IO [Maybe a]
 getResources rs= atomically $ withSTMResources rs f1 where
-  f1 mrs= Resources  [] [] mrs
+  f1 = Resources  [] []
 
 
 -- | Delete the   resource from cache and from persistent storage.
@@ -746,7 +747,7 @@ takeDBRef cache flags x =do
           case mr of
             Just dbref -> return . Just $! castErr dbref
             Nothing -> unsafeIOToSTM (finalize w)  >> takeDBRef cache flags x
-       Nothing   -> do
+       Nothing   ->
            safeIOToSTM $ readToCache flags cache  keyr
               -- unsafeIOToSTM $ readResourceByKey keyr
 
