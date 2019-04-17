@@ -1,9 +1,6 @@
-{-# LANGUAGE   FlexibleInstances, UndecidableInstances
-               , MultiParamTypeClasses, FunctionalDependencies
-
-               , ExistentialQuantification
-               , ScopedTypeVariables
-                #-}
+{-# LANGUAGE FlexibleInstances, UndecidableInstances,
+  MultiParamTypeClasses, ExistentialQuantification,
+  ScopedTypeVariables #-}
 
 {- | This module decouples the 'IResource" class in two classes
  one for key extraction 'Indexable' and other ('Serializable" for serlalization and persistence

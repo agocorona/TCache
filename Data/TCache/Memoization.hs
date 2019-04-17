@@ -33,7 +33,8 @@ import Data.RefSerialize(addrHash,newContext)
 
 data Cached a b= forall m.Executable m => Cached a (a -> m b) b Integer deriving Typeable
 
-context= unsafePerformIO newContext
+{-# NOINLINE context #-}
+context = unsafePerformIO newContext
 
 -- | given a string, return a key that can be used in Indexable instances
 --  Of non persistent objects, such are cached objects (it changes fron execution to execution)
@@ -107,7 +108,7 @@ cachedSTM time f a= do
    case time of
      0 -> return b
      _ -> do
-           TOD tnow _ <- unsafeIOToSTM $ getClockTime
+           TOD tnow _ <- unsafeIOToSTM getClockTime
            if tnow - t >= fromIntegral time
                       then do
                             Cached _ _ b _ <- fillIt ref prot
@@ -125,10 +126,10 @@ cachedSTM time f a= do
 -- The Int parameter is the timeout, in second after the last evaluation, after which the cached value will be discarded and the expression will be evaluated again if demanded
 -- . Time == 0 means no timeout
 cachedByKey :: (Typeable a, Executable m,MonadIO m) => String -> Int ->  m a -> m a
-cachedByKey key time  f = cached  time (\_ -> f) key
+cachedByKey key time  f = cached time (const f) key
 
 cachedByKeySTM :: (Typeable a, Executable m) => String -> Int ->  m a -> STM a
-cachedByKeySTM key time  f = cachedSTM  time (\_ -> f) key
+cachedByKeySTM key time  f = cachedSTM  time (const f) key
 
 -- Flush the cached object indexed by the key
 flushCached :: String -> IO ()
@@ -136,7 +137,7 @@ flushCached k= atomically $ invalidateKey $ cachedKeyPrefix ++ k           -- !>
 
 -- | a pure version of cached
 cachedp :: (Indexable a,Typeable a,Typeable b) => (a ->b) -> a -> b
-cachedp f k = execute $ cached  0 (\x -> Identity $ f x) k
+cachedp f k = execute $ cached 0 (Identity . f) k
 
 --testmemo= do
 --   let f x = "hi"++x  !> "exec1"

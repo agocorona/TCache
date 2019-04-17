@@ -21,39 +21,90 @@ data  Data=   Data Int Int deriving (Read, Show, Typeable)
 
 instance Indexable Data where
         key         (Data i _)= show i
-        defPath _ = "cacheData/"  -- directory where the data is stored.
+        defPath _ = ".tcachedata/caching/"  -- directory where the data is stored.
 
 instance Serializable Data where
   serialize= pack . show
   deserialize= read . unpack
 
 
+printStat (total, dirty, loaded) =
+  putStrLn $ "total: " ++ show total ++ " dirty: " ++ show dirty ++ " loaded: " ++ show loaded
+
 main=  do
 
-        putStrLn "see the source code of this example"
-        putStrLn "This program test the caching and cleaning and re-retrieval and update of the cache"
-
-        putStrLn "asyncronous write every 10 seconds, 100 elems max cache size"
-        putStrLn "default policy (defaultCheck) for clearing the cache is to reduce the cache to half of max sixe when size exceeds the max"
+        putStrLn "See the source code of this example!"
+        putStrLn ""
+        putStrLn "This program tests the caching, cleaning, re-retrieval and updating of the cache."
+        putStrLn "It uses the DefaultPersistence (disk) and defaultCheck (cleaning rules)."
+        putStrLn "It writes asyncronously every 10 seconds all changed elemements to disk."
+        putStrLn "When there is more than the allowed number of elements (100) in the cache it cleans them by the given rule."
+        putStrLn "With defaultCheck it drops elements which where not accesed since half the time between now and the last sync."
 
         putStrLn ""
-        putStrLn "create resources"
-        putStrLn " (acces no resources and return two new Data objects defined in items)"
+        putStrLn "Creating 200 resources with content: n 0"
         withResources[] $ const[Data i 0 | i <- [1..200]]
+        -- get stats about them (total, dirty, loaded)
+        statElems >>= printStat
+
+        x <- getResources [Data i 0 | i <- [1..200]]
+        putStrLn $ "Last element: " ++ show (last x)
 
         putStrLn ""
-        clearSyncCacheProc  10 defaultCheck 100
-        putStrLn $ "every 10 seconds, the modified data in the cache is written in the folder: " ++  defPath ( undefined :: Data)
-        putStrLn "wait 10 seconds  to let the next write cycle to enter (every 10 seconds, set by clearSyncCacheProc)"
+        putStrLn $ "Starting the async proc with folder: " ++  defPath ( undefined :: Data)
+        clearSyncCacheProc 10 defaultCheck 100
+        threadDelay 6000000
 
+        putStrLn "after 6 seconds"
+        statElems >>= printStat
+        threadDelay 5000000
 
-        putStrLn "because 200 exceeds the maximum cache size (100) defaultCheck will discard the 150  older elems  to reduce the cache to a half"
-        putStrLn "This is the behaviour defined in defaultCheck."
-        threadDelay 20000000
-        putStrLn " update every element, included the discarded ones"
+        putStrLn "after 11 seconds (should have saved)"
+        statElems >>= printStat
+        threadDelay 5000000
+
+        putStrLn "after 16 seconds (accessing one element)"
+        -- I read (access) all the data here!
+        getResource (Data 100 undefined) >>= print
+
+        statElems >>= printStat
+        --syncCache
+        threadDelay 5000000
+
+        putStrLn "after 21 seconds (should have cleaned)"
+        statElems >>= printStat
+
+        putStrLn "Updating every element, included the discarded ones with 'n 1'"
         withResources [Data i undefined | i <- [1..200]] $
           \ds ->  [ Data i (n+1)  | Just(Data i n) <- ds]
+        threadDelay 5000000
 
-        putStrLn $"wait for the next cycle of file update. The files must contain 1 instead o 0 (Data n 1) in the folder "++ defPath ( undefined :: Data)
-        threadDelay 20000000
+        putStrLn "after 26 seconds (should be 'full')"
+        statElems >>= printStat
 
+        putStrLn "accessing all entries once and print the last"
+        -- I read (access) all the data here!
+        x <- getResources [Data i 1 | i <- [1..200]]
+        print $ last x
+
+
+        threadDelay 5000000
+
+        putStrLn "after 31 seconds (should have saved)"
+        statElems >>= printStat
+        threadDelay 5000000
+
+        putStrLn "after 36 seconds"
+        statElems >>= printStat
+        threadDelay 5000000
+
+        putStrLn "after 41 seconds (should be cleaned again)"
+        statElems >>= printStat
+
+        -- reloading all of the data again
+        putStrLn "getting the first 50 elements"
+        x <- getResources [Data i 1 | i <- [1..50]]
+        putStrLn $ "Last element: " ++ show (last x)
+
+        putStrLn "Now we have"
+        statElems >>= printStat

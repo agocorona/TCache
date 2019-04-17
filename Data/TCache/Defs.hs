@@ -1,4 +1,4 @@
-{-# LANGUAGE   TypeSynonymInstances, FlexibleInstances, ScopedTypeVariables, DeriveDataTypeable #-}
+{-# LANGUAGE   FlexibleInstances, ScopedTypeVariables, DeriveDataTypeable #-}
 
 {- | some internal definitions. To use default persistence, import
 @Data.TCache.DefaultPersistence@ instead -}
@@ -18,7 +18,7 @@ import System.IO.Error
 import Control.Exception as Exception
 import Control.Concurrent
 import Data.List(elemIndices,isInfixOf)
-import Data.Maybe(fromJust)
+import Data.Maybe(fromJust, fromMaybe)
 
 import qualified Data.ByteString.Lazy.Char8 as B
 
@@ -40,10 +40,10 @@ data DBRef a= DBRef !String  !(TPVar a)  deriving Typeable
 
 
 castErr a= r where
-  r= case cast a of
-      Nothing -> error $ "Type error: " ++ (show $ typeOf a) ++ " does not match "++ (show $ typeOf r)
-                          ++ "\nThis means that objects of these two types have the same key \nor the retrieved object type is not the previously stored one for the same key\n"
-      Just x  -> x
+  r = fromMaybe
+      (error $ "Type error: " ++ show (typeOf a) ++ " does not match " ++ show (typeOf r)
+        ++ "\nThis means that objects of these two types have the same key \nor the retrieved object type is not the previously stored one for the same key\n")
+      (cast a)
 
 
 {- | Indexable is an utility class used to derive instances of IResource
@@ -138,7 +138,7 @@ defaultPersistIORef = unsafePerformIO $ newIORef  filePersist
 -- @setPersist= const Nothing@. By default it is 'filePersist'
 --
 -- this statement must be the first one before any other TCache call
-setDefaultPersist p= writeIORef defaultPersistIORef p
+setDefaultPersist = writeIORef defaultPersistIORef
 
 {-# NOINLINE getDefaultPersist #-}
 getDefaultPersist =  unsafePerformIO $ readIORef defaultPersistIORef
@@ -154,30 +154,31 @@ getPersist x= unsafePerformIO $ case setPersist x of
 defaultReadByKey ::   String-> IO (Maybe B.ByteString)
 defaultReadByKey k= iox   -- !> "defaultReadByKey"
      where
-     iox = handle handler $ do   
-             s <-  readFileStrict  k 
+     iox = handle handler $ do
+             s <-  readFileStrict  k
              return $ Just   s                                                       -- `debug` ("read "++ filename)
 
- 
+
      handler ::  IOError ->  IO (Maybe B.ByteString)
      handler  e
-      | isAlreadyInUseError e = defaultReadByKey  k                         
+      | isAlreadyInUseError e = defaultReadByKey  k
       | isDoesNotExistError e = return Nothing
-      | otherwise= if ("invalid" `isInfixOf` ioeGetErrorString e)
+      | otherwise= if "invalid" `isInfixOf` ioeGetErrorString e
          then
             error $  "defaultReadByKey: " ++ show e ++ " defPath and/or keyResource are not suitable for a file path:\n"++ k++"\""
-              
+
          else defaultReadByKey  k
 
 
 defaultWrite :: String-> B.ByteString -> IO()
-defaultWrite filename x= safeWrite filename  x
+defaultWrite = safeWrite
+
 safeWrite filename str= handle  handler  $ B.writeFile filename str   -- !> ("write "++filename)
-     where          
+     where
      handler e-- (e :: IOError)
-       | isDoesNotExistError e=do 
-                  createDirectoryIfMissing True $ take (1+(last $ elemIndices '/' filename)) filename   --maybe the path does not exist
-                  safeWrite filename str               
+       | isDoesNotExistError e=do
+                  createDirectoryIfMissing True $ take (1 + last (elemIndices '/' filename)) filename   --maybe the path does not exist
+                  safeWrite filename str
 
 
        | otherwise= if "invalid" `isInfixOf` ioeGetErrorString e
@@ -186,7 +187,7 @@ safeWrite filename str= handle  handler  $ B.writeFile filename str   -- !> ("wr
              else do
                 hPutStrLn stderr $ "defaultWriteResource:  " ++ show e ++  " in file: " ++ filename ++ " retrying"
                 safeWrite filename str
-              
+
 defaultDelete :: String -> IO()
 defaultDelete filename =
      handle (handler filename) $ removeFile filename
@@ -199,7 +200,7 @@ defaultDelete filename =
        | isAlreadyInUseError e= do
             hPutStrLn stderr $ "defaultDelResource: busy"  ++  " in file: " ++ filename ++ " retrying"
 --            threadDelay 100000   --`debug`"isAlreadyInUseError"
-            defaultDelete filename  
+            defaultDelete filename
        | otherwise = do
             hPutStrLn stderr $ "defaultDelResource:  " ++ show e ++  " in file: " ++ filename ++ " retrying"
 --           threadDelay 100000     --`debug` ("otherwise " ++ show e)
@@ -213,7 +214,7 @@ defReadResourceByKey k= iox where
       f  file >>=  evaluate . fmap  (deserialKey k)
       where
       file= defPath x ++ k
-      x= undefined `asTypeOf` (fromJust $ unsafePerformIO iox)
+      x= undefined `asTypeOf` fromJust (unsafePerformIO iox)
 
 defWriteResource s= do
       let Persist _ f _ = getPersist  s
@@ -230,6 +231,5 @@ readFileStrict f = openFile f ReadMode >>= \ h -> readIt h `finally` hClose h
   readIt h= do
       s   <- hFileSize h
       let n= fromIntegral s
-      str <- B.hGet h n
-      return str
+      B.hGet h n
 

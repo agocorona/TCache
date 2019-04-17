@@ -1,5 +1,5 @@
-{-# LANGUAGE ScopedTypeVariables, ExistentialQuantification, DeriveDataTypeable
-    , FlexibleInstances, UndecidableInstances #-}
+{-# LANGUAGE ScopedTypeVariables, ExistentialQuantification,
+  FlexibleInstances, UndecidableInstances #-}
 
 {- | TCache is a transactional cache with configurable persistence that permits
 STM transactions with objects that synchronize synchronously or asynchronously with
@@ -281,6 +281,7 @@ clearsyncCache just pass elements from 2 to 1
 ,setConditions
 ,clearSyncCache
 ,numElems
+,statElems
 ,syncWrite
 ,SyncMode(..)
 ,clearSyncCacheProc
@@ -292,24 +293,24 @@ where
 
 
 import GHC.Conc
-import Control.Monad(when)
-import qualified Data.HashTable.IO as H
-import Data.IORef
-import System.IO.Unsafe
+import Control.Monad(when, void)
+import qualified Data.HashTable.IO as H(BasicHashTable, new, insert, lookup, toList)
+import Data.IORef(IORef, newIORef, readIORef, writeIORef)
+import System.IO.Unsafe(unsafePerformIO)
 import System.IO(hPutStr, stderr)
-import Data.Maybe
+import Data.Maybe(catMaybes)
+import Data.Foldable(forM_)
 import Data.Char(isSpace)
 import Data.TCache.Defs
 import Data.TCache.IResource
 import Data.TCache.Triggers
-import Control.Exception
-import Data.Typeable
-import System.Time
-import System.Mem
-import System.Mem.Weak
+import Data.Typeable(Typeable)
+import System.Time(getClockTime, ClockTime(TOD))
+import System.Mem(performGC)
+import System.Mem.Weak(Weak, deRefWeak, mkWeakPtr, finalize)
 
-import Control.Concurrent.MVar
-import Control.Exception(catch, throw,evaluate)
+import Control.Concurrent.MVar(newMVar, newEmptyMVar, takeMVar, putMVar)
+import Control.Exception(catch, handle, throw, evaluate, bracket, SomeException)
 
 --import Debug.Trace
 --(!>) = flip trace
@@ -351,7 +352,31 @@ numElems= do
    return $ length elems
 
 
-deRefWeakSTM = unsafeIOToSTM . deRefWeak
+-- | Retuns some statistical information for the DBRefs in the cache (for debugging)
+-- This returns a tuple containing:
+-- total : count of the total elements in cache
+-- dirty : the elements which need to be written to the persistent storage
+-- loaded : the elements which are currently hold in memory
+statElems :: IO (Int, Int, Int)
+statElems = do
+  (cache, lastSync) <- readIORef refcache
+  elems <-   H.toList cache
+  (tosave, elems, size) <- atomically $ extract elems lastSync
+  counted <- mapM count elems
+  return (size, length tosave, sum counted)
+  where
+  count (CacheElem _ w)= do
+      mr <- deRefWeak w
+      case mr of
+        Just (DBRef _ tv) -> do
+            r <- readTVarIO tv
+            case r of
+              Exist (Elem x _ mt) -> return 1
+              DoNotExist -> return 0
+              NotRead ->  return 0
+        Nothing -> finalize w >> return 0
+
+-- deRefWeakSTM = unsafeIOToSTM . deRefWeak
 
 --deleteFromCache :: (IResource a, Typeable a) => DBRef a -> IO ()
 --deleteFromCache (DBRef k tv)=   do
@@ -375,7 +400,7 @@ readDBRef dbref@(DBRef key  tv)= do
        t <- unsafeIOToSTM timeInteger
        writeTVar tv  . Exist $ Elem x t mt
        return $ Just x
-   DoNotExist -> return $ Nothing
+   DoNotExist -> return Nothing
    NotRead ->  do
        r <- safeIOToSTM $ readResourceByKey key
        case r of
@@ -386,7 +411,7 @@ readDBRef dbref@(DBRef key  tv)= do
            return $ Just  x
 
 -- | Read multiple DBRefs in a single request using the new 'readResourcesByKey'
-readDBRefs :: (IResource a, Typeable a)  => [DBRef a] -> STM [(Maybe a)]
+readDBRefs :: (IResource a, Typeable a)  => [DBRef a] -> STM [Maybe a]
 readDBRefs dbrefs= do
   let mf (DBRef key  tv)= do
       r <- readTVar tv
@@ -403,12 +428,12 @@ readDBRefs dbrefs= do
   let fromLeft (Left k)= k
       formLeft _ = error "this will never happen"
   rs <- safeIOToSTM . readResourcesByKey $ map fromLeft toReadKeys
-  let processTVar (r, DBRef key  tv)= do
-           case r of
-             Nothing -> writeTVar tv DoNotExist
-             Just x  -> do
-               t <- unsafeIOToSTM timeInteger
-               writeTVar tv $ Exist $ Elem  x t (-1)
+  let processTVar (r, DBRef key  tv)=
+        case r of
+            Nothing -> writeTVar tv DoNotExist
+            Just x  -> do
+            t <- unsafeIOToSTM timeInteger
+            writeTVar tv $ Exist $ Elem  x t (-1)
 
   mapM_ processTVar $ zip rs dbrs
   let mix (Right x:xs) ys   = x:mix xs ys
@@ -492,6 +517,7 @@ getDBRef key=   unsafePerformIO $! getDBRef1 $! key where
      putMVar getRefFlag ()
      return  dbref
 
+{-# NOINLINE getRefFlag #-}
 getRefFlag= unsafePerformIO $ newMVar ()
 
 {- | Create the object passed as parameter (if it does not exist) and
@@ -663,25 +689,22 @@ withSTMResources :: (IResource a, Typeable a)=> [a]   -- ^ the list of resources
                      -> ([Maybe a]-> Resources a x)   -- ^ The function that process the resources found and return a Resources structure
                      -> STM x                  -- ^ The return value in the STM monad.
 
-withSTMResources rs f=  do
-  (cache,_) <- unsafeIOToSTM $ readIORef refcache
-  mtrs      <- takeDBRefs rs cache AddToHash
-
+withSTMResources rs f = do
+  (cache, _) <- unsafeIOToSTM $ readIORef refcache
+  mtrs <- takeDBRefs rs cache AddToHash
   mrs <- mapM mreadDBRef mtrs
   case f mrs of
-      Retry  -> retry
-      Resources  as ds r  -> do
-          applyTriggers (map (getDBRef . keyResource) ds) (repeat (Nothing  `asTypeOf` (Just(head ds))))
-          delListFromHash cache   ds
-          releaseTPVars as cache
-
-          safeIOToSTM . criticalSection saving $ mapM_ delResource ds
-          return r
-
+    Retry -> retry
+    Resources as ds r -> do
+      applyTriggers (map (getDBRef . keyResource) ds) (repeat (Nothing `asTypeOf` Just (head ds)))
+      delListFromHash cache ds
+      releaseTPVars as cache
+      safeIOToSTM . criticalSection saving $ mapM_ delResource ds
+      return r
   where
-  mreadDBRef :: (IResource a, Typeable a) => Maybe (DBRef a) -> STM (Maybe a)
-  mreadDBRef (Just dbref)= readDBRef dbref
-  mreadDBRef Nothing    =  return Nothing
+    mreadDBRef :: (IResource a, Typeable a) => Maybe (DBRef a) -> STM (Maybe a)
+    mreadDBRef (Just dbref) = readDBRef dbref
+    mreadDBRef Nothing = return Nothing
 
 
 -- | Update of a single object in the cache
@@ -697,8 +720,11 @@ withResource r f= withResources [r] (\[mr]-> [f mr])
 -- @ withResources rs f=  atomically $ 'withSTMResources' rs f1 >> return() where   f1 mrs= let as= f mrs in  Resources  as [] ()@
 {-# INLINE withResources #-}
 withResources:: (IResource a,Typeable a)=> [a]-> ([Maybe a]-> [a])-> IO ()
-withResources rs f=  atomically $ withSTMResources rs f1 >> return() where
-     f1 mrs= let as= f mrs in  Resources  as [] ()
+withResources rs f = atomically $ void (withSTMResources rs f1)
+  where
+    f1 mrs =
+      let as = f mrs
+       in Resources as [] ()
 
 -- | To read a resource from the cache.
 --
@@ -811,7 +837,7 @@ releaseTPVar cache  r =do
 
 
 delListFromHash :: IResource a => Ht -> [a] -> STM ()
-delListFromHash  cache  xs= mapM_ del xs
+delListFromHash cache= mapM_ del
  where
  del :: IResource a => a -> STM ()
  del x= do
@@ -822,20 +848,20 @@ delListFromHash  cache  xs= mapM_ del xs
      Just (CacheElem _ w) -> do
       mr <- unsafeIOToSTM $ deRefWeak w
       case mr of
-        Just dbref@(DBRef _  tv) -> do
+        Just dbref@(DBRef _  tv) ->
            writeTVar tv DoNotExist
-        Nothing -> do
+        Nothing ->
           unsafeIOToSTM (finalize w) >> del  x
 
 
-
+{- never used
 updateListToHash hash kv= mapM (update1 hash) kv where
         update1 h (k,v)= H.insert h k v
-
+-}
 
 
 -- | Start the thread that periodically call `clearSyncCache` to clean and writes on the persistent storage.
--- it is indirecly set by means of `syncWrite`, since it is more higuer level. I recommend to use the latter
+-- it is indirectly set by means of `syncWrite`, since it is more higuer level. I recommend to use the latter
 -- Otherwise, 'syncCache' or `clearSyncCache` or `atomicallySync` must be invoked explicitly or no persistence will exist.
 -- Cache writes allways save a coherent state
 clearSyncCacheProc ::
@@ -854,10 +880,10 @@ clearSyncCacheProc  time check sizeObjects= forkIO  clear
 criticalSection mv f= bracket
   (takeMVar mv)
   (putMVar mv)
-  $ const $ f
+  $ const f
 
 -- | Force the atomic write of all cached objects modified since the last save into permanent storage.
--- Cache writes allways save a coherent state. As allways, only the modified objects are written.
+-- Cache writes allways save a coherent state. As always, only the modified objects are written.
 syncCache ::  IO ()
 syncCache  = criticalSection saving $ do
       (cache,lastSync) <- readIORef refcache  --`debug` "syncCache"
@@ -871,7 +897,7 @@ syncCache  = criticalSection saving $ do
 data SyncMode= Synchronous   -- ^ sync state to permanent storage when `atomicallySync` is invoked
              | Asynchronous
                   {frequency  :: Int                     -- ^ number of seconds between saves when asynchronous
-                  ,check      :: (Integer-> Integer-> Integer-> Bool)  -- ^ The user-defined check-for-cleanup-from-cache for each object. 'defaultCheck' is an example
+                  ,check      :: Integer-> Integer-> Integer-> Bool  -- ^ The user-defined check-for-cleanup-from-cache for each object. 'defaultCheck' is an example
                   ,cacheSize  :: Int                     -- ^ size of the cache when async
                   }
              | SyncManual               -- ^ use `syncCache` to write the state
@@ -879,21 +905,22 @@ data SyncMode= Synchronous   -- ^ sync state to permanent storage when `atomical
 
 
 
+{-# NOINLINE tvSyncWrite #-}
 tvSyncWrite= unsafePerformIO $ newIORef  (Synchronous, Nothing)
 
 -- | Specify the cache synchronization policy with permanent storage. See `SyncMode` for details
 syncWrite::  SyncMode -> IO()
-syncWrite mode= do
-     (_,thread) <- readIORef tvSyncWrite
-     when (isJust thread ) $ killThread . fromJust $ thread
-     case mode of
-          Synchronous -> modeWrite
-          SyncManual  -> modeWrite
-          Asynchronous time check maxsize -> do
-               th <- clearSyncCacheProc  time check maxsize >> return()
-               writeIORef tvSyncWrite (mode,Just th)
-     where
-     modeWrite= writeIORef tvSyncWrite (mode, Nothing)
+syncWrite mode = do
+  (_, thread) <- readIORef tvSyncWrite
+  forM_ thread killThread
+  case mode of
+    Synchronous -> modeWrite
+    SyncManual -> modeWrite
+    Asynchronous time check maxsize -> do
+      th <- void $ clearSyncCacheProc time check maxsize
+      writeIORef tvSyncWrite (mode, Just th)
+  where
+    modeWrite = writeIORef tvSyncWrite (mode, Nothing)
 
 
 -- | Perform a synchronization of the cache with permanent storage once executed the STM transaction
@@ -908,14 +935,13 @@ atomicallySync proc=do
    sync= do
        (savetype,_) <- readIORef tvSyncWrite
        case  savetype of
-        Synchronous -> do
-            syncCache
+        Synchronous -> syncCache
         _ -> return ()
 
 
 -- |Saves the unsaved elems of the cache.
 -- Cache writes allways save a coherent state.
---  Unlike `syncChace` this call deletes some elems of  the cache when the number of elems > @sizeObjects@.
+--  Unlike `syncCache` this call deletes some elems from the cache when the number of elems > @sizeObjects@.
 --  The deletion depends on the check criteria, expressed by the first parameter.
 --  'defaultCheck' is the one implemented to be passed by default. Look at it to understand the clearing criteria.
 clearSyncCache ::  (Integer -> Integer-> Integer-> Bool)-> Int -> IO ()
@@ -931,8 +957,8 @@ clearSyncCache check sizeObjects= criticalSection saving $ do
 
   where
 
-        -- delete elems from the cache according with the checking criteria
-  filtercache t cache lastSync elems= mapM_ filter elems
+  -- delete elems from the cache according with the checking criteria
+  filtercache t cache lastSync = mapM_ filter
     where
     filter (CacheElem Nothing w)= return()  --alive because the dbref is being referenced elsewere
     filter (CacheElem (Just (DBRef key _)) w) = do
@@ -942,13 +968,11 @@ clearSyncCache check sizeObjects= criticalSection saving $ do
        Just (DBRef _  tv) -> atomically $ do
          r <- readTVar tv
          case r of
-                    Exist (Elem x lastAccess _ ) ->
-                             if check t lastAccess lastSync
-                              then do
-                              unsafeIOToSTM . H.insert cache key $ CacheElem Nothing w
-                              writeTVar tv NotRead
-                                  else return ()
-                    _    ->  return()
+            Exist (Elem x lastAccess _ ) ->
+                when (check t lastAccess lastSync) $ do
+                    unsafeIOToSTM . H.insert cache key $ CacheElem Nothing w
+                    writeTVar tv NotRead
+            _    ->  return()
 
 
 
@@ -960,7 +984,7 @@ clearSyncCache check sizeObjects= criticalSection saving $ do
 defaultCheck
        :: Integer    -- ^ current time in seconds
        -> Integer    -- ^ last access time for a given object
-       -> Integer    -- ^ last cache syncronization (with the persisten storage)
+       -> Integer    -- ^ last cache synchronization (with the persisten storage)
        -> Bool       -- ^ return true for all the elems not accesed since half the time between now and the last sync
 defaultCheck  now lastAccess lastSync
         | lastAccess > halftime = False
@@ -969,6 +993,7 @@ defaultCheck  now lastAccess lastSync
     where
     halftime= now- (now-lastSync) `div` 2
 
+{-# NOINLINE refConditions #-}
 refConditions= unsafePerformIO $ newIORef (return(), return())
 
 setConditions :: IO() -> IO() -> IO()
@@ -976,12 +1001,13 @@ setConditions :: IO() -> IO() -> IO()
 -- database persistence should be a commit.
 setConditions pre post= writeIORef refConditions (pre, post)
 
+{-# NOINLINE saving #-}
 saving= unsafePerformIO $ newMVar False
 
 save  tosave = do
      (pre, post) <-  readIORef refConditions
      pre    -- !> (concatMap (\(Filtered x) -> keyResource x)tosave)
-     mapM (\(Filtered x) -> writeResource x) tosave
+     mapM_ (\(Filtered x) -> writeResource x) tosave
      post
 
 
@@ -1003,7 +1029,7 @@ extract elems lastSave= filter1 [] [] (0:: Int)  elems
           r <- readTVar tvr
           case r of
             Exist (Elem r _ modTime) ->
-                  if (modTime >= lastSave)
+                  if modTime >= lastSave
                     then filter1 (Filtered r:sav) tofilter (n+1) rest
                     else filter1 sav tofilter (n+1) rest -- !> ("rejected->" ++ keyResource r)
 

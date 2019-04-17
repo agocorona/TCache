@@ -69,9 +69,9 @@ fields in a registers are to be indexed, they must have different types.
 
 -}
 
-{-# LANGUAGE  DeriveDataTypeable, MultiParamTypeClasses
-, FunctionalDependencies, FlexibleInstances, UndecidableInstances
-, TypeSynonymInstances, IncoherentInstances #-}
+{-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances,
+ UndecidableInstances, TypeSynonymInstances, IncoherentInstances, MonoLocalBinds #-}
+
 module Data.TCache.IndexQuery(
   index
 , (.==.)
@@ -92,10 +92,9 @@ import Data.TCache.Defs
 import Data.List
 import Data.Typeable
 import Control.Concurrent.STM
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
 import qualified Data.Map  as M
 import Data.IORef
-import qualified  Data.Map as M
 import System.IO.Unsafe
 import Data.ByteString.Lazy.Char8(pack, unpack)
 
@@ -117,8 +116,8 @@ instance  Queriable reg a => IResource (Index reg a) where
   delResource = defDelResource
 
 
-
-data Index reg a= Index (M.Map a [DBRef reg]) deriving ( Show, Typeable)
+-- was data before hlint suggested to use a newtype here
+newtype Index reg a= Index (M.Map a [DBRef reg]) deriving ( Show, Typeable)
 
 instance (IResource reg, Typeable reg, Ord a, Read a)
    => Read (Index reg a) where
@@ -166,11 +165,7 @@ getIndexr rindex val= do
    mindex <- readDBRef rindex
 
    let index = case mindex of Just (Index index) ->  index; _ -> M.empty
-
-   let dbrefs= case M.lookup  val index of
-        Just  dbrefs -> dbrefs
-        Nothing      -> []
-
+   let dbrefs= fromMaybe [] (M.lookup val index)
    return (rindex, Index index, dbrefs)
 
 selectorIndex
@@ -277,13 +272,11 @@ class SetOperations set set'  setResult | set set' -> setResult where
 instance SetOperations  [DBRef a] [DBRef a] [DBRef a] where
     (.&&.) fxs fys= do
      xs <- fxs
-     ys <- fys
-     return $ intersect xs ys
+     intersect xs <$> fys
 
     (.||.) fxs fys= do
      xs <- fxs
-     ys <- fys
-     return $ union xs ys
+     union xs <$> fys
 
 infixr 4 .&&.
 infixr 3 .||.
@@ -292,12 +285,12 @@ instance SetOperations  (JoinData a a') [DBRef a] (JoinData a a') where
     (.&&.) fxs fys= do
      xss <- fxs
      ys <- fys
-     return [(intersect xs ys, zs) | (xs,zs) <- xss]
+     return [(xs `intersect` ys, zs) | (xs,zs) <- xss]
 
     (.||.) fxs fys= do
      xss <- fxs
      ys <- fys
-     return [(union xs ys, zs) | (xs,zs) <- xss]
+     return [(xs `union` ys, zs) | (xs,zs) <- xss]
 
 instance SetOperations  [DBRef a] (JoinData a a')  (JoinData a a') where
     (.&&.) fxs fys=  fys .&&. fxs
@@ -307,12 +300,12 @@ instance SetOperations  (JoinData a a') [DBRef a'] (JoinData a a') where
     (.&&.) fxs fys= do
      xss <- fxs
      ys <- fys
-     return [(zs,intersect xs ys) | (zs,xs) <- xss]
+     return [(zs, xs `intersect` ys) | (zs,xs) <- xss]
 
     (.||.) fxs fys= do
      xss <- fxs
      ys <- fys
-     return [(zs, union xs ys) | (zs,xs) <- xss]
+     return [(zs, xs `union` ys) | (zs,xs) <- xss]
 
 
 -- |  return all  the (indexed)  values which this field has and a DBRef pointer to the register
@@ -325,7 +318,7 @@ indexOf selector= do
      Just (Index index) -> return $ M.toList index;
      _ -> do
         let fields= show $ typeOf  selector
-        error $ "the index for "++ fields ++" do not exist. At main, use \"Data.TCache.IdexQuery.index\" to start indexing this field"
+        error $ "the index for "++ fields ++" do not exist. At main, use \"Data.TCache.IndexQuery.index\" to start indexing this field"
 
 retrieve :: Queriable reg a => (reg -> a) -> a -> (a -> a -> Bool) -> STM[DBRef reg]
 retrieve field value op= do
@@ -337,8 +330,7 @@ retrieve field value op= do
 recordsWith
   :: (IResource a, Typeable a) =>
      STM [DBRef a] -> STM [ a]
-recordsWith dbrefs= dbrefs >>= mapM readDBRef >>= return . catMaybes
-
+recordsWith dbrefs= catMaybes <$> (dbrefs >>= mapM readDBRef)
 
 
 class Select  selector a res | selector a -> res  where
@@ -353,23 +345,23 @@ instance (Select sel1 a res1, Select sel2 b res2 )
 
 
 instance (Typeable reg, IResource reg) =>  Select (reg -> a) (STM [DBRef reg])  (STM [a]) where
-  select sel xs= return . map sel  =<< return . catMaybes =<< mapM readDBRef  =<< xs
+  select sel xs= map sel <$> (catMaybes <$> (mapM readDBRef =<< xs))
 
 
 instance  (Typeable reg, IResource reg,
           Select (reg -> a) (STM [DBRef reg])  (STM [a]),
           Select (reg -> b) (STM [DBRef reg])  (STM [b]) )
-          =>  Select ((reg -> a),(reg -> b)) (STM [DBRef reg])  (STM [(a,b)])
+          =>  Select (reg -> a, reg -> b) (STM [DBRef reg])  (STM [(a,b)])
           where
-    select (sel, sel') xs= mapM (\x -> return (sel x, sel' x)) =<< return . catMaybes =<< mapM readDBRef  =<< xs
+    select (sel, sel') xs= mapM (\x -> return (sel x, sel' x)) =<< catMaybes <$> (mapM readDBRef  =<< xs)
 
 instance  (Typeable reg, IResource reg,
           Select (reg -> a) (STM [DBRef reg])  (STM [a]),
           Select (reg -> b) (STM [DBRef reg])  (STM [b]),
           Select (reg -> c) (STM [DBRef reg])  (STM [c]) )
-          =>  Select ((reg -> a),(reg -> b),(reg -> c)) (STM [DBRef reg])  (STM [(a,b,c)])
+          =>  Select (reg -> a, reg -> b, reg -> c) (STM [DBRef reg])  (STM [(a,b,c)])
           where
-    select (sel, sel',sel'') xs= mapM (\x -> return (sel x, sel' x, sel'' x)) =<< return . catMaybes =<< mapM readDBRef  =<< xs
+    select (sel, sel',sel'') xs= mapM (\x -> return (sel x, sel' x, sel'' x)) =<< catMaybes <$> (mapM readDBRef  =<< xs)
 
 
 instance  (Typeable reg, IResource reg,
@@ -377,9 +369,9 @@ instance  (Typeable reg, IResource reg,
           Select (reg -> b) (STM [DBRef reg])  (STM [b]),
           Select (reg -> c) (STM [DBRef reg])  (STM [c]),
           Select (reg -> d) (STM [DBRef reg])  (STM [d]) )
-          =>  Select ((reg -> a),(reg -> b),(reg -> c),(reg -> d)) (STM [DBRef reg])  (STM [(a,b,c,d)])
+          =>  Select (reg -> a, reg -> b, reg -> c, reg -> d) (STM [DBRef reg])  (STM [(a,b,c,d)])
           where
-    select (sel, sel',sel'',sel''') xs= mapM (\x -> return (sel x, sel' x, sel'' x, sel''' x)) =<< return . catMaybes =<< mapM readDBRef  =<< xs
+    select (sel, sel',sel'',sel''') xs= mapM (\x -> return (sel x, sel' x, sel'' x, sel''' x)) =<< catMaybes <$> (mapM readDBRef  =<< xs)
 
 -- for join's   (field1 op field2)
 
@@ -387,11 +379,11 @@ instance  (Typeable reg, IResource reg,
           Typeable reg', IResource reg',
           Select (reg -> a) (STM [DBRef reg])  (STM [a]),
           Select (reg' -> b) (STM [DBRef reg'])  (STM [b]) )
-          =>  Select ((reg -> a),(reg' -> b)) (STM (JoinData reg reg')) (STM [([a],[b])])
+          =>  Select (reg -> a, reg' -> b) (STM (JoinData reg reg')) (STM [([a],[b])])
           where
     select (sel, sel') xss = xss >>=  mapM select1
         where
         select1 (xs, ys) = do
-         rxs <- return . map sel  =<< return . catMaybes  =<< mapM readDBRef  xs
-         rys <- return .  map sel'  =<< return . catMaybes  =<< mapM readDBRef  ys
+         rxs <- map sel  <$> (catMaybes  <$> mapM readDBRef  xs)
+         rys <- map sel' <$> (catMaybes  <$> mapM readDBRef  ys)
          return (rxs,rys)

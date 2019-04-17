@@ -1,4 +1,4 @@
-{-# OPTIONS -XDeriveDataTypeable -XFlexibleInstances  -XUndecidableInstances #-}
+{-# LANGUAGE DeriveDataTypeable, FlexibleInstances, UndecidableInstances #-}
 module Main where
 import Data.TCache
 import Data.TCache.DefaultPersistence
@@ -35,6 +35,7 @@ instance Indexable Emp where
 
 myCompanyName= "mycompany"
 
+{-# NOINLINE myCompanyRef #-}
 myCompanyRef= unsafePerformIO . atomically $  do
 
      refEmp1 <- newDBRef Emp{ename= "Emp1", salary= 34000}
@@ -80,7 +81,7 @@ printSalaries ref= do
 putMsg msg= putStrLn $ ">>" ++ msg
 
 main= do
-  putMsg "DBRefs are cached idexable, serializable, unique-by-key references to objects stored in the cache, mutable under STM transactions"
+  putMsg "DBRefs are cached indexable, serializable, unique-by-key references to objects stored in the cache, mutable under STM transactions"
   putMsg "DBRef's are instances of Show"
   print myCompanyRef
 
@@ -116,7 +117,7 @@ main= do
 
   putStrLn "checking race condition on cache cleaning"
 
-  let emp1=  Emp{ename="Emp1", salary=(-1)}
+  let emp1=  Emp{ename="Emp1", salary= -1}
   let key= keyResource emp1
   let remp1 = getDBRef key
   Just emp1 <- atomically $ readDBRef remp1

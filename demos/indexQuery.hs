@@ -9,7 +9,7 @@ import Debug.Trace
 import Data.Typeable
 
 
-data Person= Person {pname :: String} deriving  (Show, Read, Eq, Typeable)
+data Person= Person {pname :: String, age :: Int} deriving  (Show, Read, Eq, Typeable)
 
 data Car= Car{owner :: DBRef Person , cname:: String} deriving (Show, Read, Eq, Typeable)
 
@@ -25,14 +25,18 @@ main =  do
    index owner
    index pname
    index cname
+   index age
 
-   bruce <- atomically $    newDBRef $ Person "bruce"
+   bruce <- atomically $    newDBRef $ Person "bruce" 42
    atomically $  mapM_ newDBRef [Car bruce "Bat Mobile", Car bruce "Porsche"]
 
    r <- atomically $ cname .>=. "Bat Mobile"
    print r
 
    r <- atomically $ select (cname, owner) $  (owner .==. bruce)  .&&. (cname .==. "Bat Mobile")
+   print r
+
+   r <- atomically $ age .>=. (20 :: Int)
    print r
 
 

@@ -1,6 +1,5 @@
+{-# LANGUAGE ExistentialQuantification, DeriveDataTypeable #-}
 
-
-{-# LANGUAGE ExistentialQuantification, DeriveDataTypeable, BangPatterns #-}
 module Data.TCache.Triggers(DBRef(..),Elem(..),Status(..),addTrigger,applyTriggers) where
 import Data.TCache.IResource
 import Data.TCache.Defs
@@ -9,21 +8,21 @@ import Data.IORef
 import System.IO.Unsafe
 import Unsafe.Coerce
 import GHC.Conc (STM, unsafeIOToSTM)
-import Data.Maybe(maybeToList,catMaybes)
+import Data.Maybe(maybeToList, catMaybes, fromMaybe, fromJust)
 import Data.List(nubBy)
 import Control.Concurrent.STM
 
 import Debug.Trace
-import Data.Maybe(fromJust)
 
 newtype  TriggerType a= TriggerType (DBRef a -> Maybe a -> STM()) deriving Typeable
 
-data CMTrigger= forall a.(IResource a, Typeable a) => CMTrigger  !((DBRef a) -> Maybe a -> STM())
+data CMTrigger= forall a.(IResource a, Typeable a) => CMTrigger  !(DBRef a -> Maybe a -> STM())
 
 
 
 cmtriggers :: IORef [(TypeRep ,[CMTrigger])]
-cmtriggers= unsafePerformIO $ newIORef []
+{-# NOINLINE cmtriggers #-}
+cmtriggers = unsafePerformIO $ newIORef []
 
 
 
@@ -35,7 +34,7 @@ The called trigger function has two parameters: the DBRef being accesed
 If the DBRef is being deleted, the second parameter is 'Nothing'.
 if the DBRef contains Nothing, then the object is being created
 -}
-addTrigger :: (IResource a, Typeable a) => ((DBRef a) -> Maybe a -> STM()) -> IO()
+addTrigger :: (IResource a, Typeable a) => (DBRef a -> Maybe a -> STM()) -> IO()
 addTrigger   t= do
    map <-  readIORef cmtriggers
    writeIORef cmtriggers $
@@ -43,11 +42,11 @@ addTrigger   t= do
           in  nubByType $ (atype ,CMTrigger t : ts) : map
   where
   nubByType= nubBy (\(t,_)(t',_) -> t==t')
-  (_,(atype:_))= splitTyConApp  . typeOf $ TriggerType t
+  (_,atype:_)= splitTyConApp  . typeOf $ TriggerType t
 
 
 
-mbToList mxs= case mxs of Nothing -> []; Just xs -> xs
+mbToList = fromMaybe []
 
 -- | internally called when a DBRef is modified/deleted/created
 applyTriggers:: (IResource a, Typeable a) => [DBRef a] -> [Maybe a] -> STM()
@@ -61,7 +60,7 @@ applyTriggers  dbrfs mas = do
    f t= mapM2_ (f1 t)  dbrfs  mas
 
    f1 ::(IResource a, Typeable a) =>  CMTrigger -> DBRef a -> Maybe a ->  STM()
-   f1 (CMTrigger t) dbref ma =    (unsafeCoerce t)  dbref ma
+   f1 (CMTrigger t)= unsafeCoerce t
 
 
 
