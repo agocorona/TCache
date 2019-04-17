@@ -414,14 +414,14 @@ readDBRef dbref@(DBRef key  tv)= do
 readDBRefs :: (IResource a, Typeable a)  => [DBRef a] -> STM [Maybe a]
 readDBRefs dbrefs= do
   let mf (DBRef key  tv)= do
-      r <- readTVar tv
-      case r of
-        Exist (Elem x _ mt) -> do
-          t <- unsafeIOToSTM timeInteger
-          writeTVar tv  . Exist $ Elem x t mt
-          return $ Right $ Just x
-        DoNotExist -> return $ Right Nothing
-        NotRead ->  return $ Left key
+        r <- readTVar tv
+        case r of
+          Exist (Elem x _ mt) -> do
+            t <- unsafeIOToSTM timeInteger
+            writeTVar tv  . Exist $ Elem x t mt
+            return $ Right $ Just x
+          DoNotExist -> return $ Right Nothing
+          NotRead ->  return $ Left key
   inCache <- mapM mf dbrefs
   let pairs = foldr(\pair@(x,dbr) xs -> case x of Left k -> pair:xs; _ -> xs ) [] $ zip inCache dbrefs
   let (toReadKeys, dbrs) = unzip pairs
@@ -432,8 +432,8 @@ readDBRefs dbrefs= do
         case r of
             Nothing -> writeTVar tv DoNotExist
             Just x  -> do
-            t <- unsafeIOToSTM timeInteger
-            writeTVar tv $ Exist $ Elem  x t (-1)
+              t <- unsafeIOToSTM timeInteger
+              writeTVar tv $ Exist $ Elem  x t (-1)
 
   mapM_ processTVar $ zip rs dbrs
   let mix (Right x:xs) ys   = x:mix xs ys
@@ -815,9 +815,9 @@ releaseTPVar cache  r =do
                 case mr of
                     Nothing -> unsafeIOToSTM (finalize w) >> releaseTPVar cache  r
                     Just dbref@(DBRef key  tv) -> do
-                    applyTriggers [dbref] [Just (castErr r)]
-                    t <- unsafeIOToSTM  timeInteger
-                    writeTVar tv . Exist  $ Elem  (castErr r)  t t
+                      applyTriggers [dbref] [Just (castErr r)]
+                      t <- unsafeIOToSTM  timeInteger
+                      writeTVar tv . Exist  $ Elem  (castErr r)  t t
 
 
             Nothing   ->  do
