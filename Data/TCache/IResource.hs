@@ -2,16 +2,6 @@
     , UndecidableInstances, FlexibleInstances #-}
 module Data.TCache.IResource where
 
-import Data.Typeable
-import System.IO.Unsafe
-import Control.Concurrent.STM
-import Control.Concurrent
-import Control.Exception as Exception
-import System.IO
-import System.IO.Error
-import Control.Monad(when,replicateM)
-import Data.List(isInfixOf)
-
 
 {- | Must be defined for every object to be cached.
 -}

@@ -8,11 +8,10 @@ import Data.IORef
 import System.IO.Unsafe
 import Unsafe.Coerce
 import GHC.Conc (STM, unsafeIOToSTM)
-import Data.Maybe(maybeToList, catMaybes, fromMaybe, fromJust)
+import Data.Maybe(fromMaybe, fromJust)
 import Data.List(nubBy)
-import Control.Concurrent.STM
 
-import Debug.Trace
+--import Debug.Trace
 
 newtype  TriggerType a= TriggerType (DBRef a -> Maybe a -> STM()) deriving Typeable
 
@@ -35,25 +34,26 @@ If the DBRef is being deleted, the second parameter is 'Nothing'.
 if the DBRef contains Nothing, then the object is being created
 -}
 addTrigger :: (IResource a, Typeable a) => (DBRef a -> Maybe a -> STM()) -> IO()
-addTrigger   t= do
-   map <-  readIORef cmtriggers
+addTrigger  tr = do
+   map' <-  readIORef cmtriggers
    writeIORef cmtriggers $
-      let ts = mbToList $ lookup atype map
-          in  nubByType $ (atype ,CMTrigger t : ts) : map
+      let ts = mbToList $ lookup atype map'
+          in  nubByType $ (atype ,CMTrigger tr : ts) : map'
   where
   nubByType= nubBy (\(t,_)(t',_) -> t==t')
-  (_,atype:_)= splitTyConApp  . typeOf $ TriggerType t
+  (_,atype:_)= splitTyConApp  . typeOf $ TriggerType tr
 
 
 
+mbToList :: Maybe [a] -> [a]
 mbToList = fromMaybe []
 
 -- | internally called when a DBRef is modified/deleted/created
 applyTriggers:: (IResource a, Typeable a) => [DBRef a] -> [Maybe a] -> STM()
 applyTriggers  [] _ = return()
 applyTriggers  dbrfs mas = do
-   map <- unsafeIOToSTM $ readIORef cmtriggers
-   let ts = mbToList $ lookup   (typeOf $ fromJust (head mas)) map
+   map' <- unsafeIOToSTM $ readIORef cmtriggers
+   let ts = mbToList $ lookup   (typeOf $ fromJust (head mas)) map'
    mapM_ f  ts
 
    where
@@ -64,7 +64,7 @@ applyTriggers  dbrfs mas = do
 
 
 
-mapM2_ _ [] _= return()
+mapM2_ :: Monad m => (t1 -> t2 -> m a) -> [t1] -> [t2] -> m ()
+mapM2_ _ [] _ = return()
+mapM2_ _ _ [] = return()
 mapM2_ f (x:xs) (y:ys)=  f x y >> mapM2_ f xs ys
-
-

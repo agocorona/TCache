@@ -7,16 +7,12 @@ module Data.TCache.Defs  where
 import Data.Typeable
 import Control.Concurrent.STM(TVar)
 
-import Data.TCache.IResource
-
 import System.IO.Unsafe
 import Data.IORef
 import System.Directory
-import Control.Monad(when,replicateM)
 import System.IO
 import System.IO.Error
 import Control.Exception as Exception
-import Control.Concurrent
 import Data.List(elemIndices,isInfixOf)
 import Data.Maybe(fromJust, fromMaybe)
 
@@ -29,16 +25,24 @@ type AccessTime = Integer
 type ModifTime  = Integer
 
 
-data Status a= NotRead | DoNotExist | Exist a deriving Typeable
+data Status a = NotRead | DoNotExist | Exist a deriving Typeable
 
-data Elem a= Elem !a !AccessTime !ModifTime   deriving Typeable
+data Elem a = Elem !a !AccessTime !ModifTime   deriving Typeable
 
-type TPVar a=   TVar (Status(Elem a))
+type TPVar a =   TVar (Status(Elem a))
 
-data DBRef a= DBRef !String  !(TPVar a)  deriving Typeable
+data DBRef a = DBRef !String  !(TPVar a)  deriving Typeable
 
+instance  Show (DBRef a) where
+  show (DBRef key1 _)= "DBRef \""++ key1 ++ "\""
 
+instance Eq (DBRef a) where
+  DBRef k _ == DBRef k' _ =  k == k'
 
+instance Ord (DBRef a) where
+  compare (DBRef k _) (DBRef k' _) = compare k k'
+
+castErr :: (Typeable a1, Typeable a2) => a1 -> a2
 castErr a= r where
   r = fromMaybe
       (error $ "Type error: " ++ show (typeOf a) ++ " does not match " ++ show (typeOf r)
@@ -63,9 +67,9 @@ instance Indexable Car where key Car{cname= n} = \"Car \" ++ n
 @
 -}
 class Indexable a where
-    key:: a -> String
+    key :: a -> String
     defPath :: a -> String       -- ^ additional extension for default file paths.
-                                -- IMPORTANT:  defPath must depend on the datatype, not the value (must be constant). Default is ".tcachedata/"
+    -- IMPORTANT:  defPath must depend on the datatype, not the value (must be constant). Default is ".tcachedata/"
     defPath =  const ".tcachedata/"
 
 --instance IResource a => Indexable a where
@@ -101,7 +105,7 @@ The performance of serialization is not critical.
 class Serializable a  where
   serialize   :: a -> B.ByteString
   deserialize :: B.ByteString -> a
-  deserialize= error "No deserialization defined for your data"
+  deserialize = error "No deserialization defined for your data"
   deserialKey :: String -> B.ByteString -> a
   deserialKey _ = deserialize
   setPersist  :: a -> Maybe Persist              -- ^ `defaultPersist` if Nothing
@@ -126,11 +130,13 @@ data Persist = Persist{
      , delete      ::  Key -> IO()}                  -- ^  delete
 
 -- | Implements default default-persistence of objects in files with their keys as filenames
+filePersist :: Persist
 filePersist   = Persist
     {readByKey= defaultReadByKey
     ,write    = defaultWrite
     ,delete   = defaultDelete}
 
+defaultPersistIORef :: IORef Persist
 {-# NOINLINE defaultPersistIORef #-}
 defaultPersistIORef = unsafePerformIO $ newIORef  filePersist
 
@@ -138,11 +144,14 @@ defaultPersistIORef = unsafePerformIO $ newIORef  filePersist
 -- @setPersist= const Nothing@. By default it is 'filePersist'
 --
 -- this statement must be the first one before any other TCache call
+setDefaultPersist :: Persist -> IO ()
 setDefaultPersist = writeIORef defaultPersistIORef
 
 {-# NOINLINE getDefaultPersist #-}
+getDefaultPersist :: Persist
 getDefaultPersist =  unsafePerformIO $ readIORef defaultPersistIORef
 
+getPersist :: (Serializable a, Typeable a) => a -> Persist
 getPersist x= unsafePerformIO $ case setPersist x of
      Nothing -> readIORef defaultPersistIORef
      Just p  -> return p
@@ -173,6 +182,7 @@ defaultReadByKey k= iox   -- !> "defaultReadByKey"
 defaultWrite :: String-> B.ByteString -> IO()
 defaultWrite = safeWrite
 
+safeWrite :: FilePath -> B.ByteString -> IO ()
 safeWrite filename str= handle  handler  $ B.writeFile filename str   -- !> ("write "++filename)
      where
      handler e-- (e :: IOError)
@@ -195,7 +205,7 @@ defaultDelete filename =
      where
 
      handler :: String -> IOException -> IO ()
-     handler file e
+     handler _ e
        | isDoesNotExistError e= return ()  --`debug` "isDoesNotExistError"
        | isAlreadyInUseError e= do
             hPutStrLn stderr $ "defaultDelResource: busy"  ++  " in file: " ++ filename ++ " retrying"
@@ -208,6 +218,7 @@ defaultDelete filename =
 
 
 
+defReadResourceByKey :: (Indexable a, Serializable a, Typeable a) => String -> IO (Maybe a)
 defReadResourceByKey k= iox where
     iox= do
       let Persist f _ _ = getPersist  x
@@ -216,20 +227,22 @@ defReadResourceByKey k= iox where
       file= defPath x ++ k
       x= undefined `asTypeOf` fromJust (unsafePerformIO iox)
 
+defWriteResource :: (Indexable a, Serializable a, Typeable a) => a -> IO ()
 defWriteResource s= do
       let Persist _ f _ = getPersist  s
       f (defPath s ++ key s) $ serialize s
 
+defDelResource :: (Indexable a, Serializable a, Typeable a) => a -> IO ()
 defDelResource s= do
       let Persist _ _ f = getPersist s
       f $ defPath s ++ key s
 
 
 -- | Strict read from file, needed for default file persistence
+readFileStrict :: FilePath -> IO B.ByteString
 readFileStrict f = openFile f ReadMode >>= \ h -> readIt h `finally` hClose h
   where
   readIt h= do
       s   <- hFileSize h
       let n= fromIntegral s
       B.hGet h n
-

@@ -11,6 +11,8 @@ import Data.ByteString.Lazy.Char8(pack,unpack)
 import Control.Concurrent
 import Debug.Trace
 import Data.Typeable
+
+debug :: a -> String -> a
 debug a b= trace b a
 
 -- The data elements to be used in the example
@@ -28,11 +30,12 @@ instance Serializable Data where
   deserialize= read . unpack
 
 
+printStat :: (Show a1, Show a2, Show a3) => (a1, a2, a3) -> IO ()
 printStat (total, dirty, loaded) =
   putStrLn $ "total: " ++ show total ++ " dirty: " ++ show dirty ++ " loaded: " ++ show loaded
 
-main=  do
-
+main :: IO ()
+main =  do
         putStrLn "See the source code of this example!"
         putStrLn ""
         putStrLn "This program tests the caching, cleaning, re-retrieval and updating of the cache."
@@ -47,12 +50,12 @@ main=  do
         -- get stats about them (total, dirty, loaded)
         statElems >>= printStat
 
-        x <- getResources [Data i 0 | i <- [1..200]]
-        putStrLn $ "Last element: " ++ show (last x)
+        x1 <- getResources [Data i 0 | i <- [1..200]]
+        putStrLn $ "Last element: " ++ show (last x1)
 
         putStrLn ""
         putStrLn $ "Starting the async proc with folder: " ++  defPath ( undefined :: Data)
-        clearSyncCacheProc 10 defaultCheck 100
+        _ <- clearSyncCacheProc 10 defaultCheck 100
         threadDelay 6000000
 
         putStrLn "after 6 seconds"
@@ -84,9 +87,8 @@ main=  do
 
         putStrLn "accessing all entries once and print the last"
         -- I read (access) all the data here!
-        x <- getResources [Data i 1 | i <- [1..200]]
-        print $ last x
-
+        x2 <- getResources [Data i 1 | i <- [1..200]]
+        print $ last x2
 
         threadDelay 5000000
 

@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FlexibleInstances, UndecidableInstances,
   MultiParamTypeClasses, ExistentialQuantification,
   ScopedTypeVariables #-}
@@ -17,18 +18,13 @@ Indexable(..)
 ,filePersist
 ,Persist(..)) where
 
-import System.IO.Unsafe
 import Data.Typeable
-import Data.Maybe(fromJust)
 import Data.TCache.Defs
 import Data.TCache
 
-
-
-
 instance  (Typeable a,  Indexable a, Serializable a) => IResource a where
   keyResource = key
-  writeResource =defWriteResource
+  writeResource = defWriteResource
   readResourceByKey = defReadResourceByKey
   delResource = defDelResource
 

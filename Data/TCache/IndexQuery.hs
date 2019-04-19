@@ -91,11 +91,8 @@ import Data.TCache
 import Data.TCache.Defs
 import Data.List
 import Data.Typeable
-import Control.Concurrent.STM
 import Data.Maybe (catMaybes, fromMaybe)
 import qualified Data.Map  as M
-import Data.IORef
-import System.IO.Unsafe
 import Data.ByteString.Lazy.Char8(pack, unpack)
 
 
@@ -128,19 +125,20 @@ instance (IResource reg, Typeable reg, Ord a, Read a)
 instance (Queriable reg a) => Serializable (Index reg a)  where
   serialize= pack . show
   deserialize= read . unpack
-  setPersist index= persistIndex $ getType index
+  setPersist index1= persistIndex $ getType index1
     where
     getType :: Index reg a -> reg
     getType= undefined -- type level
 
 
 
+keyIndex :: (Show a1, Show a2) => a1 -> a2 -> String
 keyIndex treg tv= "index-" ++ show treg ++ show tv
 
 instance (Typeable reg, Typeable a) => Indexable (Index reg a) where
-   key map= keyIndex typeofreg typeofa
+   key map1= keyIndex typeofreg typeofa
        where
-       [typeofreg, typeofa]= typeRepArgs $! typeOf map
+       [typeofreg, typeofa]= typeRepArgs $! typeOf map1
 --   defPath index= defPath $ ofRegister index
 --       where
 --       ofRegister :: Index reg a -> reg
@@ -164,18 +162,18 @@ getIndexr :: (Queriable reg a)
 getIndexr rindex val= do
    mindex <- readDBRef rindex
 
-   let index = case mindex of Just (Index index) ->  index; _ -> M.empty
-   let dbrefs= fromMaybe [] (M.lookup val index)
-   return (rindex, Index index, dbrefs)
+   let index1 = case mindex of Just (Index index2) -> index2; _ -> M.empty
+   let dbrefs= fromMaybe [] (M.lookup val index1)
+   return (rindex, Index index1, dbrefs)
 
 selectorIndex
   :: (Queriable reg a, IResource reg
       ) =>
      (reg -> a) -> DBRef (Index reg a) -> DBRef reg -> Maybe reg -> STM ()
 
-selectorIndex selector rindex pobject mobj = do
+selectorIndex selector rindex1 pobject mobj1 = do
    moldobj <- readDBRef pobject
-   choice moldobj mobj
+   choice moldobj mobj1
    where
    choice moldobj mobj=
     case (moldobj, mobj) of
@@ -189,34 +187,37 @@ selectorIndex selector rindex pobject mobj = do
 
      (Just oldobj, Nothing) -> do  -- delete the old selector value from the index
           let val= selector oldobj
-          (rindex,Index index, dbrefs) <-  getIndexr rindex val
+          (rindex,Index index2, dbrefs) <-  getIndexr rindex1 val
           let dbrefs'=   Data.List.delete pobject  dbrefs
-          writeDBRef rindex $ Index (M.insert  val dbrefs' index)
+          writeDBRef rindex $ Index (M.insert  val dbrefs' index2)
 
      (Nothing, Just obj) ->  do      -- add the new value to the index
           let val= selector obj
-          (rindex,Index index, dbrefs) <-  getIndexr rindex val
+          (rindex,Index index2, dbrefs) <-  getIndexr rindex1 val
           let dbrefs'=   nub $ Data.List.insert pobject  dbrefs
-          writeDBRef rindex $ Index (M.insert  val dbrefs' index)
+          writeDBRef rindex $ Index (M.insert  val dbrefs' index2)
 
 {- | Register a trigger for indexing the values of the field passed as parameter.
  the indexed field can be used to perform relational-like searches
 -}
 
-index
-  :: (Queriable reg a) =>
-     (reg -> a) -> IO ()
+index :: (Queriable reg a) => (reg -> a) -> IO ()
 index sel= do
    let [one, two]= typeRepArgs $! typeOf sel
        rindex= getDBRef $! keyIndex one two
    addTrigger $ selectorIndex sel rindex
    let proto= Index M.empty  `asTypeOf` indexsel sel
-   withResources [proto]  $ init proto
+   withResources [proto]  $ init1 proto
    where
-   init proto [Nothing]  =  [proto]
-   init _ [Just _] = []
+   init1 proto [Nothing]  =  [proto]
+   init1 _ [Just _] = []
+   init1 _ (Nothing:_:_) = error "this will never happen(?)"
+   init1 _ (Just _:_:_) = error "this will never happen(?)"
+   init1 _ [] = error "this will never happen(?)"
+
    indexsel :: (reg-> a)  -> Index reg a
    indexsel= undefined
+
 -- | implement the relational-like operators, operating on record fields
 class RelationOps field1 field2 res | field1 field2 -> res  where
     (.==.) :: field1 -> field2 -> STM  res
@@ -246,9 +247,9 @@ join op field1 field2 =do
   return $ mix  idxs  idxs'
   where
   opv (v, _ )(v', _)= v `op` v'
-  mix    xs  ys=
-      let zlist= [(x,y) |  x <- xs , y <- ys, x `opv` y]
-      in map ( \(( _, xs),(_ ,ys)) ->(xs,ys)) zlist
+  mix xs1  ys1 =
+      let zlist= [(x,y) |  x <- xs1 , y <- ys1, x `opv` y]
+      in map ( \(( _, xs2),(_ ,ys2)) ->(xs2, ys2)) zlist
 
 type JoinData reg reg'=[([DBRef reg],[DBRef reg'])]
 
@@ -315,15 +316,15 @@ indexOf selector= do
    let rindex= getDBRef $! keyIndex one two
    mindex <- readDBRef rindex
    case mindex of
-     Just (Index index) -> return $ M.toList index;
+     Just (Index index1) -> return $ M.toList index1;
      _ -> do
         let fields= show $ typeOf  selector
         error $ "the index for "++ fields ++" do not exist. At main, use \"Data.TCache.IndexQuery.index\" to start indexing this field"
 
 retrieve :: Queriable reg a => (reg -> a) -> a -> (a -> a -> Bool) -> STM[DBRef reg]
 retrieve field value op= do
-   index <- indexOf field
-   let higuer = map (\(v, vals) -> if op v value then  vals else [])  index
+   index1 <- indexOf field
+   let higuer = map (\(v, vals) -> if op v value then  vals else [])  index1
    return $ concat higuer
 
 -- from a Query result, return the records, rather than the references

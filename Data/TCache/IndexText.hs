@@ -68,22 +68,20 @@ import Data.Bits
 import System.Mem.StableName
 import Data.List((\\))
 import GHC.Conc(unsafeIOToSTM)
-import Control.Concurrent(forkIO, threadDelay)
 import Data.Char
 import Data.ByteString.Lazy.Char8(pack, unpack)
 import Control.Monad
-import System.IO.Unsafe
 
 --import Debug.Trace
 --(!>)= flip trace
 
-data IndexText=  IndexText
-        { fieldType :: !String
-        , lastDoc :: Int
-        , mapDocKeyInt :: M.Map String Int
-        , mapIntDocKey :: M.Map Int String
-        , mapTextInteger :: M.Map T.Text Integer
-         } deriving (Typeable)
+data IndexText =  IndexText
+  !String -- fieldType
+  Int -- lastDoc
+  (M.Map String Int) -- mapDocKeyInt
+  (M.Map Int String) -- mapIntDocKey
+  (M.Map T.Text Integer) -- mapTextInteger
+  deriving (Typeable)
 
 
 instance Show IndexText  where
@@ -106,46 +104,56 @@ instance IResource IndexText where
   readResourceByKey = defReadResourceByKey
   delResource = defDelResource
 
+{-
 readInitDBRef v x= do
   mv <- readDBRef x
   case mv of
     Nothing -> writeDBRef x v >> return v
     Just v -> return v
+-}
 
-add ref t key w = op ref t setBit w key
-del ref t key w = op ref t clearBit w key
+add :: DBRef IndexText -> String -> String -> [T.Text] -> STM ()
+add ref t key1 w = op ref t setBit w key1
 
-op refIndex t set ws key =  do
+del :: DBRef IndexText -> String -> String -> [T.Text] -> STM ()
+del ref t key1 w = op ref t clearBit w key1
+
+op :: DBRef IndexText -> String -> (Integer -> Int -> Integer) -> [T.Text] -> String -> STM ()
+op refIndex t set ws1 key1 =  do
    mindex <- readDBRef refIndex
-   let mindex'= process mindex  ws
+   let mindex'= process mindex  ws1
    writeDBRef refIndex $ fromJust mindex'
 
  where
  process mindex []= mindex
- process mindex (w:ws)=
+ process mindex (w:ws) =
    case mindex of
-       Nothing ->  process (Just $ IndexText t 0 (M.singleton key 0) (M.singleton  0 key) (M.singleton w 1)) ws
-       Just (IndexText t n mapSI mapIS map) -> do
-        let (docLocation,n', mapSI',mapIS')= case M.lookup key mapSI  of
-               Nothing  -> let n'= n+1 in (n', n'
-                                          , M.insert key n' mapSI
-                                          , M.insert n' key mapIS)  -- new Document
+       Nothing ->  process (Just $ IndexText t 0 (M.singleton key1 0) (M.singleton  0 key1) (M.singleton w 1)) ws
+       Just (IndexText _ n mapSI mapIS map1) -> do
+        let (docLocation, n1, mapSI',mapIS')= case M.lookup key1 mapSI  of
+               Nothing  -> let n2= n+1 in (n2, n2
+                                          , M.insert key1 n2 mapSI
+                                          , M.insert n2 key1 mapIS)  -- new Document
                Just m -> (m,n, mapSI,mapIS)         -- already indexed document
 
-        case M.lookup w map of
+        case M.lookup w map1 of
          Nothing ->    --new word
-            process (Just $ IndexText t  n' mapSI' mapIS' (M.insert w (set 0 docLocation) map)) ws
+            process (Just $ IndexText t  n1 mapSI' mapIS' (M.insert w (set 0 docLocation) map1)) ws
          Just integer ->  -- word already indexed
-            process (Just $ IndexText t n' mapSI' mapIS' $ M.insert w (set integer docLocation) map) ws
+            process (Just $ IndexText t n1 mapSI' mapIS' $ M.insert w (set integer docLocation) map1) ws
 
+addProto :: Typeable a => a -> IO ()
 addProto sel =  do
   let [t1,t2]=  typeRepArgs $! typeOf sel
   let t =  show t1 ++ show t2
   let proto = IndexText t 0 M.empty M.empty M.empty
-  withResources [proto] $ init proto
+  withResources [proto] $ init' proto
   where
-   init proto [Nothing]  = [proto]
-   init _ [Just _] = []
+   init' proto [Nothing]  = [proto]
+   init' _ [Just _] = []
+   init' _ [] = error "this will never happen(?)"
+   init' _ (Nothing:_:_) = error "this will never happen(?)"
+   init' _ (Just _:_:_) = error "this will never happen(?)"
 
 -- | start a trigger to index the contents of a register field
 indexText
@@ -171,7 +179,7 @@ indext :: (IResource a, Typeable a,Typeable b)
        => (a -> b) -> (b -> [T.Text])  -> DBRef a -> Maybe a -> STM()
 indext sel convert dbref mreg = f1 --  unsafeIOToSTM $! f
   where
-    f = void $ forkIO (atomically f1)
+    {-f = void $ forkIO (atomically f1)-}
     f1 = do
       moldreg <- readDBRef dbref
       case (moldreg, mreg) of
@@ -183,13 +191,14 @@ indext sel convert dbref mreg = f1 --  unsafeIOToSTM $! f
           if st == st'
             then return ()
             else do
-              let key = keyResource reg
+              let key1 = keyResource reg
               let wrds = convert $ sel oldreg
               let wrds' = convert $ sel reg
               let new = wrds' \\ wrds
               let old = wrds \\ wrds'
-              unless (null old) $ del refIndex t key old
-              unless (null new) $ add refIndex t key new
+              unless (null old) $ del refIndex t key1 old
+              unless (null new) $ add refIndex t key1 new
+        (Nothing, Nothing) -> error "this will never happen(?)"
       where
         [t1, t2] = typeRepArgs $! typeOf sel
         t = show t1 ++ show t2
@@ -198,6 +207,7 @@ indext sel convert dbref mreg = f1 --  unsafeIOToSTM $! f
             u = undefined
 
 -- avoid duplicate code
+targs :: Typeable a => a -> STM (Maybe IndexText)
 targs sel = do
   let [t1, t2]=  typeRepArgs $! typeOf sel
   let t=  show t1 ++ show t2
@@ -216,15 +226,15 @@ containsElem sel wstr = do
       error $
         "the index for " ++
         fields ++ " do not exist. At main, use \"Data.TCache.IndexQuery.index\" to start indexing this field"
-    Just (IndexText t n _ mmapIntString map1) ->
+    Just (IndexText _ n _ mmapIntString map1) ->
       case M.lookup w map1 of
         Nothing -> return []
         Just integer -> do
           let mns =
                 map
-                  (\n ->
-                     if testBit integer n
-                       then Just n
+                  (\i ->
+                     if testBit integer i
+                       then Just i
                        else Nothing)
                   [0 .. n]
           let wordsr = mapMaybe (`M.lookup` mmapIntString) $ catMaybes mns
@@ -236,9 +246,10 @@ allElemsOf  sel  = do
     mr <- targs sel
     case mr of
       Nothing -> return []
-      Just (IndexText t n _ _ map) -> return $ M.keys map
+      Just (IndexText _ _ _ _ map') -> return $ M.keys map'
 
-words1= filter filterWordt {-( (<) 2 . T.length)-} . T.split (\c -> isSeparator c || c=='\n' || isPunctuation c )
+words1 :: T.Text -> [T.Text]
+words1 = filter filterWordt {-( (<) 2 . T.length)-} . T.split (\c -> isSeparator c || c=='\n' || isPunctuation c )
 
 -- | return the DBRefs whose fields include all the words in the requested text contents.Except the
 -- words  with less than three characters that are not digits or uppercase, that are filtered out before making the query
@@ -254,5 +265,8 @@ contains sel str= case  words str of
         let rs = map (containsElem sel) $ filter filterWord ws
         foldl1 (.&&.) rs
 
-filterWordt w= T.length w >2 || any (\c -> isUpper c || isDigit c) (T.unpack w)
-filterWord w= length w >2 || any (\c -> isUpper c || isDigit c) w
+filterWordt :: T.Text -> Bool
+filterWordt w = T.length w >2 || any (\c -> isUpper c || isDigit c) (T.unpack w)
+
+filterWord :: Foldable t => t Char -> Bool
+filterWord w = length w >2 || any (\c -> isUpper c || isDigit c) w

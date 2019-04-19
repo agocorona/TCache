@@ -3,40 +3,53 @@ module Main where
 import Data.TCache
 import Data.TCache.DefaultPersistence
 import Data.ByteString.Lazy.Char8(pack,unpack)
-import GHC.Conc
 import System.IO.Unsafe
 import Data.Typeable
-import Debug.Trace
 
-
-
-
-newtype Other= Other String deriving (Read, Show)
-
-data  Company = Company {
-   cname :: String
-   ,personnel :: [DBRef Emp]
-   ,other :: Other}
-   deriving (Read, Show,Typeable)
-
-
-data Emp= Emp{ename :: String, salary :: Float} deriving (Read, Show, Typeable)
-
-instance Indexable Company where
-  key Company{cname=name}= name
-
+{-
+-- would create orphan instances
 instance (Read a, Show a) => Serializable a where
-   serialize= pack . show
-   deserialize= read . unpack
+   serialize = pack . show
+   deserialize = read . unpack
+-}
+
+-- An Employee
+data Emp = Emp
+  { ename :: String
+  , salary :: Float
+  } deriving (Read, Show, Typeable)
+
+instance Serializable Emp where
+   serialize = pack . show
+   deserialize = read . unpack
 
 instance Indexable Emp where
-  key Emp{ename= name}= name
+  key Emp { ename = name } = name
 
+-- For illustration
+newtype Other = Other String deriving (Read, Show)
 
-myCompanyName= "mycompany"
+-- A Company
+data Company = Company
+  { cname :: String
+  , personnel :: [DBRef Emp]
+  , other :: Other
+  } deriving (Read, Show, Typeable)
 
+instance Serializable Company where
+   serialize = pack . show
+   deserialize = read . unpack
+
+instance Indexable Company where
+  key Company{ cname = name } = name
+
+myCompanyName :: String
+myCompanyName = "mycompany"
+
+-- Creating a Company from scratch
 {-# NOINLINE myCompanyRef #-}
-myCompanyRef= unsafePerformIO . atomically $  do
+myCompanyRef :: DBRef Company
+myCompanyRef = unsafePerformIO . atomically $  do
 
      refEmp1 <- newDBRef Emp{ename= "Emp1", salary= 34000}
      refEmp2 <- newDBRef Emp{ename= "Emp2", salary= 35000}
@@ -49,18 +62,16 @@ myCompanyRef= unsafePerformIO . atomically $  do
                ,personnel= [refEmp1, refEmp2, refEmp3, refEmp4]
                ,other= Other "blah blah blah"}
 
-
 -- myCompany= Company myCompanyName [getDBRef "Emp1",getDBRef "Emp2",getDBRef "Emp3"]
 
-
-
-increaseSalaries percent= do
+increaseSalaries :: Float -> STM ()
+increaseSalaries percent1 = do
   mycompany' <- readDBRef myCompanyRef
   mycompany <- case mycompany' of
     Just x -> pure x
     Nothing -> error "Boom"
 
-  mapM_  (increase percent ) $ personnel mycompany
+  mapM_  (increase percent1 ) $ personnel mycompany
   where
   increase percent ref= do
     emp' <- readDBRef ref
@@ -72,21 +83,24 @@ increaseSalaries percent= do
     where
     factor= 1+ percent/ 100
 
-printSalaries ref= do
-  Just comp <- atomically $ readDBRef ref
+printSalaries :: DBRef Company -> IO ()
+printSalaries ref1 = do
+  Just comp <- atomically $ readDBRef ref1
   mapM_ printSalary $ personnel comp
   where
   printSalary ref= atomically (readDBRef ref) >>=  print
 
+putMsg :: String -> IO ()
 putMsg msg= putStrLn $ ">>" ++ msg
 
-main= do
+main :: IO ()
+main = do
   putMsg "DBRefs are cached indexable, serializable, unique-by-key references to objects stored in the cache, mutable under STM transactions"
   putMsg "DBRef's are instances of Show"
   print myCompanyRef
 
 
-  let myCompanyRef2= read $ show myCompanyRef :: DBRef Company
+  let myCompanyRef2 = read $ show myCompanyRef :: DBRef Company
   putMsg "DBRefs are identified by the key of the referenced object"
   putMsg "DBRef's are alse instances of read"
 
@@ -105,7 +119,7 @@ main= do
   putMsg "after the increase"
   printSalaries myCompanyRef2
 
-  let emp3ref= getDBRef "Emp3"
+  let emp3ref = getDBRef "Emp3"
   putMsg "tch tch, this bad boy does not deserve his salary"
   Just emp3 <- atomically $ readDBRef emp3ref
   print emp3
@@ -117,17 +131,13 @@ main= do
 
   putStrLn "checking race condition on cache cleaning"
 
-  let emp1=  Emp{ename="Emp1", salary= -1}
-  let key= keyResource emp1
-  let remp1 = getDBRef key
-  Just emp1 <- atomically $ readDBRef remp1
+  let emp1 =  Emp{ename="Emp1", salary= -1}
+  let key1 = keyResource emp1
+  let remp1 = getDBRef key1
+  Just emp1' <- atomically $ readDBRef remp1
   atomically $ flushDBRef  remp1
-  let remp1'= getDBRef key
-  atomically $ writeDBRef remp1' $ emp1{salary=0}
+  let remp1' = getDBRef key1
+  atomically $ writeDBRef remp1' $ emp1'{salary=0}
 
   putStrLn "must reflect the salary 0 for emp1"
   printSalaries myCompanyRef2
-
-
-
-

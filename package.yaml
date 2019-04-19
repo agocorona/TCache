@@ -1,0 +1,176 @@
+name:                TCache
+version:             0.13.0.0
+github:              "agocorona/TCache"
+license:             BSD3
+author:              "Alberto Gómez Corona"
+maintainer:          "agocorona@gmail.com"
+copyright:           "2019 Alberto Gómez Corona"
+
+extra-source-files:
+  - ChangeLog.md
+  - README.md
+  - demos/*
+  - unfinished/*
+
+# Metadata used when publishing your package
+synopsis:            A Transactional cache with user-defined persistence
+category:            Data, Database
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/agocorona/TCache#readme>
+
+ghc-options: -Wall
+  -Wcompat
+  -Widentities
+#  -Wredundant-constraints
+#  -Wmissing-export-lists
+#  -Wpartial-fields
+#  -Wincomplete-uni-patterns
+#  -Wincomplete-record-updates
+#  -Werror
+
+dependencies:
+  - base >= 4.7 && < 5
+  - bytestring
+  - containers >= 0.1.0.1
+  - directory >=1.0
+  - old-time >=1.0
+  - stm
+  - text
+  - mtl
+  - hashtables
+  - RefSerialize
+
+library:
+  source-dirs: .
+  exposed-modules:
+    - Data.TCache
+    - Data.TCache.DefaultPersistence
+    - Data.TCache.Defs
+    - Data.TCache.IResource
+    - Data.TCache.IndexQuery
+    - Data.TCache.IndexText
+    - Data.TCache.Memoization
+    - Data.TCache.Triggers
+    - Data.Persistent.Collection
+    - Data.Persistent.IDynamic
+
+#executables:
+#  basicSample:
+#    main:                basicSample.hs
+#    source-dirs:         app
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#tests:
+#  caching:
+#    main:                caching.hs
+#    source-dirs:         test/caching
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#
+#  DBRef:
+#    main:                demos/DBRef.hs
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#
+#  DynamicSample:
+#    main:                demos/DynamicSample.hs
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#
+#  indexQuery:
+#    main:                demos/IndexQuery.hs
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#
+#  indexText:
+#    main:                demos/IndexText.hs
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#
+#  memoization:
+#    main:                demos/memoization.hs
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#
+#  pr:
+#    main:                demos/pr.hs
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#
+#  pushpop:
+#    main:                demos/pushpop.hs
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#
+#  testnewdbref:
+#    main:                demos/testnewdbref.hs
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#  triggerRelational:
+#    main:                demos/triggerRelational.lhs
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#  weakTest:
+#    main:                demos/weakTest.hs
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
+#  tests:
+#    main:                Spec.hs
+#    source-dirs:         test
+#    ghc-options:
+#      - -threaded
+#      - -rtsopts
+#      - -with-rtsopts=-N
+#    dependencies:
+#      - TCache
