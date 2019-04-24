@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable#-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Main where
 import Data.TCache
 import Data.TCache.DefaultPersistence
@@ -16,7 +16,8 @@ instance Serializable Doc  where
   serialize= pack . show
   deserialize= read . unpack
 
-main= do
+main :: IO ()
+main = do
   indexText  body T.pack
   let doc= Doc{title=  "title", body=  "hola que tal estamos"}
   rdoc <- atomically $ newDBRef doc
@@ -27,4 +28,4 @@ main= do
   r <- atomically $ select title $ body `contains` "hola que tal"
   print r
   if  r1 == [title doc] then print "OK" else print "FAIL"
-  if  r== [] then print "OK" else print "FAIL"
+  if  null r then print "OK" else print "FAIL"

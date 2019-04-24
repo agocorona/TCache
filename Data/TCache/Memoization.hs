@@ -11,6 +11,7 @@
 -- |
 --
 -----------------------------------------------------------------------------
+{-# OPTIONS_GHC -fno-warn-orphans -fno-warn-missing-signatures #-}
 {-# LANGUAGE  DeriveDataTypeable
             , ExistentialQuantification
             , FlexibleInstances
@@ -21,7 +22,6 @@ where
 import Data.Typeable
 import Data.TCache
 import Data.TCache.Defs(Indexable(..))
-import System.Mem.StableName
 import System.IO.Unsafe
 import System.Time
 import Data.Maybe(fromJust)
@@ -33,16 +33,18 @@ import Data.RefSerialize(addrHash,newContext)
 
 data Cached a b= forall m.Executable m => Cached a (a -> m b) b Integer deriving Typeable
 
-context= unsafePerformIO newContext
+{-# NOINLINE context #-}
+context = unsafePerformIO newContext
 
 -- | given a string, return a key that can be used in Indexable instances
 --  Of non persistent objects, such are cached objects (it changes fron execution to execution)
 -- . It uses `addrHash`
+addrStr :: a -> String
 addrStr x= "addr" ++ show hash
  where
  hash = case unsafePerformIO $ addrHash context x of
-   Right x -> x
-   Left x  -> x
+   Right x1 -> x1
+   Left x1  -> x1
 
 -- | to execute a monad for the purpose of memoizing its result
 class Executable m where
@@ -51,7 +53,7 @@ class Executable m where
 instance Executable IO where
   execute m = unsafePerformIO $! f1 m ""
    where
-   f1 m x= m
+   f1 m1 _= m1
 
 instance Executable Identity where
   execute (Identity x)= x
@@ -60,14 +62,15 @@ instance MonadIO Identity where
   liftIO f=  Identity $!  unsafePerformIO $! f
 
 
+cachedKeyPrefix :: String
 cachedKeyPrefix = "cached"
 
 instance  (Indexable a) => IResource (Cached a  b) where
-  keyResource ch@(Cached a  _ _ _)= cachedKeyPrefix ++ key a   -- ++ unsafePerformIO (addrStr f )
+  keyResource (Cached a  _ _ _)= cachedKeyPrefix ++ key a   -- ++ unsafePerformIO (addrStr f )
 
   writeResource _= return ()
   delResource _= return ()
-  readResourceByKey k= return Nothing -- error $ "access By key is undefined for cached objects.key= " ++ k
+  readResourceByKey _= return Nothing -- error $ "access By key is undefined for cached objects.key= " ++ k
 
 
   readResource (Cached a f _ _)=do
@@ -100,18 +103,19 @@ writeCached  a b c d=
 cached ::  (Indexable a,Typeable a,  Typeable b, Executable m,MonadIO m) => Int -> (a -> m b) -> a  -> m b
 cached time  f a= liftIO . atomically $ cachedSTM time f a
 
+cachedSTM :: (Typeable a, Typeable b, Executable m, Indexable a, Integral p) => p -> (a -> m b) -> a -> STM b
 cachedSTM time f a= do
    let prot= Cached a f undefined undefined
    let ref= getDBRef $ keyResource prot
-   cho@(Cached _ _ b t) <- readDBRef ref `onNothing` fillIt ref prot
+   (Cached _ _ b t) <- readDBRef ref `onNothing` fillIt ref prot
    case time of
      0 -> return b
      _ -> do
-           TOD tnow _ <- unsafeIOToSTM $ getClockTime
+           TOD tnow _ <- unsafeIOToSTM getClockTime
            if tnow - t >= fromIntegral time
                       then do
-                            Cached _ _ b _ <- fillIt ref prot
-                            return b
+                            Cached _ _ b1 _ <- fillIt ref prot
+                            return b1
                       else  return b
    where
    -- has been invalidated by flushCached
@@ -125,10 +129,10 @@ cachedSTM time f a= do
 -- The Int parameter is the timeout, in second after the last evaluation, after which the cached value will be discarded and the expression will be evaluated again if demanded
 -- . Time == 0 means no timeout
 cachedByKey :: (Typeable a, Executable m,MonadIO m) => String -> Int ->  m a -> m a
-cachedByKey key time  f = cached  time (\_ -> f) key
+cachedByKey key1 time  f = cached time (const f) key1
 
 cachedByKeySTM :: (Typeable a, Executable m) => String -> Int ->  m a -> STM a
-cachedByKeySTM key time  f = cachedSTM  time (\_ -> f) key
+cachedByKeySTM key1 time  f = cachedSTM  time (const f) key1
 
 -- Flush the cached object indexed by the key
 flushCached :: String -> IO ()
@@ -136,7 +140,7 @@ flushCached k= atomically $ invalidateKey $ cachedKeyPrefix ++ k           -- !>
 
 -- | a pure version of cached
 cachedp :: (Indexable a,Typeable a,Typeable b) => (a ->b) -> a -> b
-cachedp f k = execute $ cached  0 (\x -> Identity $ f x) k
+cachedp f k = execute $ cached 0 (Identity . f) k
 
 --testmemo= do
 --   let f x = "hi"++x  !> "exec1"
