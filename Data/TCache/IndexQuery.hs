@@ -165,7 +165,11 @@ getIndexr :: (Queriable reg a)
 getIndexr rindex val= do
    mindex <- readDBRef rindex
 
-   let index = case mindex of Just (Index index) ->  index; _ -> M.empty
+   let index = case mindex of 
+        Just (Index index) ->  index
+        _ -> do
+             let fields= show $ typeOf  rindex
+             error $ "the index for "++ fields ++" do not exist. At main, use \"Data.TCache.IdexQuery.index\" to start indexing this field"
 
    let dbrefs= case M.lookup  val index of
         Just  dbrefs -> dbrefs

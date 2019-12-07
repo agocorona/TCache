@@ -1,5 +1,5 @@
 name: TCache
-version: 0.12.0
+version: 0.12.2
 cabal-version: >= 1.6
 build-type: Simple
 license: BSD3
