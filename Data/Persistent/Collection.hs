@@ -1,13 +1,6 @@
-{-# OPTIONS  -XDeriveDataTypeable
-             -XTypeSynonymInstances
-             -XMultiParamTypeClasses
-             -XExistentialQuantification
-             -XOverloadedStrings
-             -XFlexibleInstances
-             -XUndecidableInstances
-             -XFunctionalDependencies
-
-           #-}
+{-# LANGUAGE DeriveDataTypeable, TypeSynonymInstances,
+  MultiParamTypeClasses, ExistentialQuantification,
+  OverloadedStrings, FlexibleInstances, UndecidableInstances #-}
 
 {- |
 A persistent, transactional collection with Queue interface as well as
@@ -30,7 +23,7 @@ data.persistent collection
  implementar un btree sobre el
 -}
 module Data.Persistent.Collection (
-RefQueue(..), getQRef,
+RefQueue, getQRef,
 pop,popSTM,pick, flush, flushSTM,
 pickAll, pickAllSTM, push,pushSTM,
 pickElem, pickElemSTM,  readAll, readAllSTM,
@@ -43,14 +36,11 @@ import Control.Monad
 import Data.TCache.DefaultPersistence
 
 import Data.TCache
-import System.IO.Unsafe
-import Data.RefSerialize
-import Data.ByteString.Lazy.Char8
 import Data.RefSerialize
 
-import Debug.Trace
-
-a !> b= trace b a
+--import Debug.Trace
+--(!>) :: a -> String -> a
+--a !> b= trace b a
 
 
 
@@ -61,7 +51,7 @@ instance Indexable (Queue a) where
 
 
 
-data Queue a= Queue {name :: String, imp :: [a], out ::  [a]}  deriving (Typeable)
+data Queue a= Queue String [a] [a]  deriving (Typeable)
 
 
 
@@ -76,11 +66,11 @@ instance Serialize a => Serialize (Queue a) where
 
 
 
-
+queuePrefix :: String
 queuePrefix= "Queue#"
+
+lenQPrefix :: Int
 lenQPrefix= Prelude.length queuePrefix
-
-
 
 instance   Serialize a => Serializable (Queue a ) where
   serialize = runW . showp
@@ -123,7 +113,7 @@ flush = atomically . flushSTM
 
 -- | Version in the STM monad
 flushSTM ::  (Typeable a, Serialize a)  => RefQueue a -> STM ()
-flushSTM tv= delDBRef tv
+flushSTM = delDBRef
 
 -- | Read  the first element in the queue and delete it (pop)
 pop
@@ -153,7 +143,7 @@ popSTM tv=do
     where
 
     doit (Queue n [x] [])= do
-                 writeDBRef tv $  (Queue n  [] [])
+                 writeDBRef tv (Queue n  [] [])
                  return   x
     doit (Queue _ [] []) =  retry
     doit (Queue  n imp [])  =  doit  (Queue  n [] $ Prelude.reverse imp)
@@ -172,7 +162,7 @@ pick tv = atomically $ do
     doit (Queue _ [x] [])= return   x
     doit (Queue _ [] []) =  retry
     doit (Queue  n imp [])  =  doit  (Queue  n [] $ Prelude.reverse imp)
-    doit (Queue n imp  list ) = return  $ Prelude.head list
+    doit (Queue _ _  list ) = return  $ Prelude.head list
 
 -- | Push an element in the queue
 push  ::   (Typeable a, Serialize a)  => RefQueue a -> a -> IO ()
@@ -181,7 +171,7 @@ push tv v = atomically $ pushSTM tv v
 -- | Version in the STM monad
 pushSTM ::  (Typeable a, Serialize a)  => RefQueue a -> a -> STM ()
 pushSTM  tv   v=
-      readQRef tv  >>= \ ((Queue n  imp out))  -> writeDBRef tv  $ Queue n  (v : imp) out
+      readQRef tv  >>= \ (Queue n  imp out)  -> writeDBRef tv  $ Queue n  (v : imp) out
 
 -- | Return the list of all elements in the queue. The queue remains unchanged
 pickAll ::  (Typeable a, Serialize a)  => RefQueue a -> IO [a]
@@ -190,23 +180,23 @@ pickAll= atomically  . pickAllSTM
 -- | Version in the STM monad
 pickAllSTM :: (Typeable a, Serialize a)  => RefQueue a -> STM [a]
 pickAllSTM tv= do
-     (Queue name imp out) <- readQRef tv
+     (Queue _ imp out) <- readQRef tv
      return $ out ++ Prelude.reverse imp
 
 -- | Return the first element in the queue that has the given key
 pickElem ::(Indexable a,Typeable a, Serialize a) => RefQueue a -> String -> IO(Maybe a)
-pickElem tv key= atomically $ pickElemSTM tv key
+pickElem tv k= atomically $ pickElemSTM tv k
 
 -- | Version in the STM monad
 pickElemSTM :: (Indexable a,Typeable a, Serialize a)
                      => RefQueue a -> String -> STM(Maybe a)
-pickElemSTM tv key1=  do
-     Queue name imp out <- readQRef tv
-     let xs= out ++ Prelude.reverse imp
-     when (not $ Prelude.null imp) $ writeDBRef tv $ Queue name [] xs
-     case  Prelude.filter (\x-> key x == key1) xs of
-          []    -> return $ Nothing
-          (x:_) -> return $ Just  x
+pickElemSTM tv key1 = do
+  Queue name imp out <- readQRef tv
+  let xs = out ++ Prelude.reverse imp
+  unless (Prelude.null imp) $ writeDBRef tv $ Queue name [] xs
+  case Prelude.filter (\x -> key x == key1) xs of
+    [] -> return Nothing
+    (x:_) -> return $ Just x
 
 -- | Update the first element of the queue with a new element with the same key
 updateElem :: (Indexable a,Typeable a, Serialize a)
@@ -239,12 +229,12 @@ readAllSTM tv= do
 deleteElem :: (Indexable a,Typeable a, Serialize a) => RefQueue a-> a -> IO ()
 deleteElem tv x= atomically $ deleteElemSTM tv x
 
--- | Verison in the STM monad
+-- | Version in the STM monad
 deleteElemSTM :: (Typeable a, Serialize a,Indexable a) => RefQueue a-> a -> STM ()
 deleteElemSTM tv x= do
      Queue name imp out <- readQRef tv
      let xs= out ++ Prelude.reverse imp
-     writeDBRef tv $ Queue name [] $ Prelude.filter (\x-> key x /= k) xs
+     writeDBRef tv $ Queue name [] $ Prelude.filter (\x2-> key x2 /= k) xs
      where
      k=key x
 

@@ -1,12 +1,13 @@
 import System.Mem.Weak
-import Control.Concurrent
 import Debug.Trace
 
-debug= flip trace
+debug :: c -> String -> c
+debug = flip trace
 
-dat= "this is the data"
+dat :: String
+dat = "this is the data"
 
-main= do
-  mkWeakPtr  dat . Just $ print "deleted" `debug` "deleted"
-
+main :: IO b
+main = do
+  _ <- mkWeakPtr  dat . Just $ print "deleted" `debug` "deleted"
   main
