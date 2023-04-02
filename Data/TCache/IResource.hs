@@ -7,14 +7,14 @@ module Data.TCache.IResource where
 -}
 class IResource a where
         {- The `keyResource string must be a unique  since this is used to index it in the hash table.
-        when accessing a resource, the user must provide a partial object for wich the key can be obtained.
+        when accessing a resource, the user must provide a partial object for which the key can be obtained.
         for example:
 
         @data Person= Person{name, surname:: String, account :: Int ....)
 
         keyResource Person n s ...= n++s@
 
-        the data being accesed must define the fields used by keyResource. For example
+        the data being accessed must define the fields used by keyResource. For example
 
          @  readResource Person {name="John", surname= "Adams"}@
 
@@ -27,8 +27,8 @@ class IResource a where
 
         {- | Implements the database access and marshalling of the object.
         while the database access must be strict, the marshaling must be lazy if, as is often the case,
-        some parts of the object are not really accesed.
-        If the object contains DBRefs, this avoids unnecesary cache lookups.
+        some parts of the object are not really accessed.
+        If the object contains DBRefs, this avoids unnecessary cache lookups.
         This method is called within 'atomically' blocks.
         Since STM transactions retry, readResourceByKey may be called twice in strange situations. So it must be idempotent, not only in the result but also in the effect in the database
         . However, because it is executed by 'safeIOToSTM' it is guaranteed that the execution is not interrupted.
@@ -60,7 +60,7 @@ class IResource a where
         writeResources :: [a] -> IO()
         writeResources= mapM_ writeResource
 
-        -- | Delete the resource. It is called syncronously. So it must commit
+        -- | Delete the resource. It is called synchronously. So it must commit
         delResource:: a-> IO()
         delResource x= delResources [x]
 

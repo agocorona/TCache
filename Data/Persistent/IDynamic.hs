@@ -43,7 +43,7 @@ tosave d@(IDyn r)= unsafePerformIO $ do
 
 instance Serialize Save  where
   showp (Save s)= insertString s
-  readp = error "readp not impremented for Save"
+  readp = error "readp not implemented for Save"
 
 
 errorfied :: String -> String -> a

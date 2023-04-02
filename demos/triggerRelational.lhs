@@ -92,7 +92,7 @@ So a better version of addCar is:
 >       Nothing -> return True
 >       Just Car{owner= pother} ->
 >         if pother== powner
->          then return False   -- is unchanged, not necesary to update
+>          then return False   -- is unchanged, not necessary to update
 >          else do
 >           deleteOwner pother  pcar
 >           return True

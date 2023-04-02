@@ -17,7 +17,7 @@ it includes
 
      - a 'recordsWith' clause to extract entire registers
 
-An example that register the owner and name fields fo the Car register and the
+An example that register the owner and name fields of the Car register and the
 name of the Person register, create the Bruce register, return the Bruce DBRef, create two Car registers with bruce as owner
 and query for the registers with bruce as owner and its name alpabeticaly higuer than \"Bat mobile\"
 
@@ -234,7 +234,7 @@ class RelationOps field1 field2 res | field1 field2 -> res  where
     (.<=.) :: field1 -> field2 -> STM  res
     (.<.) :: field1 -> field2 ->  STM  res
 
--- Instance of relations betweeen fields and values
+-- Instance of relations between fields and values
 -- field .op. value
 instance (Queriable reg a) => RelationOps (reg -> a) a  [DBRef reg] where
     (.==.) field value= do
@@ -261,7 +261,7 @@ join op field1 field2 =do
 
 type JoinData reg reg'=[([DBRef reg],[DBRef reg'])]
 
--- Instance of relations betweeen fields
+-- Instance of relations between fields
 -- field1 .op. field2
 instance (Queriable reg a ,Queriable reg' a ) =>RelationOps (reg -> a) (reg' -> a)  (JoinData reg reg') where
 

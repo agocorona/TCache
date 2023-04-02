@@ -26,9 +26,9 @@ cmtriggers = unsafePerformIO $ newIORef []
 
 
 {- | Add an user defined trigger to the list of triggers
-Trriggers are called just before an object of the given type is created, modified or deleted.
+Triggers are called just before an object of the given type is created, modified or deleted.
 The DBRef to the object and the new value is passed to the trigger.
-The called trigger function has two parameters: the DBRef being accesed
+The called trigger function has two parameters: the DBRef being accessed
 (which still contains the old value), and the new value.
 If the DBRef is being deleted, the second parameter is 'Nothing'.
 if the DBRef contains Nothing, then the object is being created

@@ -169,7 +169,7 @@ indexText sel convert= do
 indexList
   :: (IResource a, Typeable a, Typeable b)
      => (a -> b)      -- ^ field to index
-     -> (b -> [T.Text]) -- ^ method to convert a field element to Text (for example `pack . show` in case of elemets with Show instances)
+     -> (b -> [T.Text]) -- ^ method to convert a field element to Text (for example `pack . show` in case of elements with Show instances)
      -> IO ()
 indexList sel convert= do
   addTrigger (indext sel  convert)

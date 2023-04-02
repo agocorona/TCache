@@ -40,9 +40,9 @@ main =  do
         putStrLn ""
         putStrLn "This program tests the caching, cleaning, re-retrieval and updating of the cache."
         putStrLn "It uses the DefaultPersistence (disk) and defaultCheck (cleaning rules)."
-        putStrLn "It writes asyncronously every 10 seconds all changed elemements to disk."
+        putStrLn "It writes asynchronously every 10 seconds all changed elements to disk."
         putStrLn "When there is more than the allowed number of elements (100) in the cache it cleans them by the given rule."
-        putStrLn "With defaultCheck it drops elements which where not accesed since half the time between now and the last sync."
+        putStrLn "With defaultCheck it drops elements which where not accessed since half the time between now and the last sync."
 
         putStrLn ""
         putStrLn "Creating 200 resources with content: n 0"
