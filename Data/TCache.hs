@@ -48,7 +48,7 @@ with read/write primitives, so the traditional syntax of Haskell STM references
 can be used for interfacing with databases. As expected, the DBRefs are transactional,
  because they operate in the STM monad.
 
-A @DBRef@ is associated with its referred object trough its key.
+A @DBRef@ is associated with its referred object through its key.
 Since DBRefs are serializable, they can be elements of mutable cached objects themselves.
 They could point to other mutable objects
 and so on, so DBRefs can act as \"hardwired\" relations from mutable objects
@@ -136,7 +136,7 @@ DBRefs and @*Resource(s)@ primitives are completely interoperable. The latter op
 
 -- * @IResource@ class
 {- | Cached objects must be instances of `IResource`.
-Such instances can be implicitly derived trough auxiliary classes for file persistence.
+Such instances can be implicitly derived through auxiliary classes for file persistence.
 -}
 ,IResource(..)
 
@@ -179,9 +179,9 @@ user `buy` item= 'withResources'[user,item] buyIt
 ,deleteResource
 
 -- * Trigger operations
-{- | Trriggers are called just before an object of the given type is created, modified or deleted.
+{- | Triggers are called just before an object of the given type is created, modified or deleted.
 The DBRef to the object and the new value is passed to the trigger.
-The called trigger function has two parameters: the DBRef being accesed
+The called trigger function has two parameters: the DBRef being accessed
 (which still contains the old value), and the new value.
 If the content of the DBRef is being deleted, the second parameter is 'Nothing'.
 if the DBRef contains Nothing, then the object is being created
@@ -238,7 +238,7 @@ in the cache. The usual thing is that you do not have it, and the element will b
 collected (but still there will be a NotRead entry for this key!!!). If the DBRef is read again, the
 TCache will go to permanent storage to retrieve it.
 
-clear opertions such `clearsyncCache` does something similar:  it does not delete the
+clear operations such `clearsyncCache` does something similar:  it does not delete the
 element from the cache. It just inform the garbage collector that there is no longer necessary to maintain
 the element in the cache. So if the element has no other references (maybe you keep a
 variable that point to that DBRef) it will be GCollected.
@@ -320,12 +320,12 @@ import Control.Exception(catch, handle, throw, evaluate, bracket, SomeException)
 -- there are two references to the DBRef here
 -- The Maybe one keeps it alive until the cache releases it for *Resources
 -- calls which does not reference dbrefs explicitly
--- The weak reference keeps the dbref alive until is it not referenced elsewere
+-- The weak reference keeps the dbref alive until is it not referenced elsewhere
 data CacheElem= forall a.(IResource a,Typeable a) => CacheElem (Maybe (DBRef a)) (Weak(DBRef a))
 
 type Ht = H.BasicHashTable   String  CacheElem
 
--- contains the hastable, last sync time
+-- contains the hashtable, last sync time
 type Cache = IORef (Ht , Integer)
 data CheckTPVarFlags= AddToHash | NoAddToHash
 
@@ -354,7 +354,7 @@ numElems= do
    return $ length elems
 
 
--- | Retuns some statistical information for the DBRefs in the cache (for debugging)
+-- | Returns some statistical information for the DBRefs in the cache (for debugging)
 -- This returns a tuple containing:
 -- total : count of the total elements in cache
 -- dirty : the elements which need to be written to the persistent storage
@@ -826,7 +826,7 @@ releaseTPVar cache  r =do
                 applyTriggers [dbref] [Just r]
                 writeTVar tvr . Exist $ Elem r ti ti
                 w <- unsafeIOToSTM . mkWeakPtr dbref $ Just $ fixToCache dbref
-                unsafeIOToSTM $ H.insert cache keyr (CacheElem (Just dbref) w)-- accesed and modified XXX
+                unsafeIOToSTM $ H.insert cache keyr (CacheElem (Just dbref) w)-- accessed and modified XXX
                 return ()
 
 
@@ -862,9 +862,9 @@ updateListToHash hash kv= mapM (update1 hash) kv where
 -- | Start the thread that periodically call `clearSyncCache` to clean and writes on the persistent storage.
 -- it is indirectly set by means of `syncWrite`, since it is more higuer level. I recommend to use the latter
 -- Otherwise, 'syncCache' or `clearSyncCache` or `atomicallySync` must be invoked explicitly or no persistence will exist.
--- Cache writes allways save a coherent state
+-- Cache writes always save a coherent state
 clearSyncCacheProc ::
-         Int                          -- ^ number of seconds betwen checks. objects not written to disk are written
+         Int                          -- ^ number of seconds between checks. objects not written to disk are written
       -> (Integer -> Integer-> Integer-> Bool)  -- ^ The user-defined check-for-cleanup-from-cache for each object. 'defaultCheck' is an example
       -> Int                          -- ^ The max number of objects in the cache, if more, the  cleanup starts
       -> IO ThreadId           -- ^ Identifier of the thread created
@@ -883,7 +883,7 @@ criticalSection mv f= bracket
   $ const f
 
 -- | Force the atomic write of all cached objects modified since the last save into permanent storage.
--- Cache writes allways save a coherent state. As always, only the modified objects are written.
+-- Cache writes always save a coherent state. As always, only the modified objects are written.
 syncCache ::  IO ()
 syncCache  = criticalSection saving $ do
       (cache,lastSync) <- readIORef refcache  --`debug` "syncCache"
@@ -941,7 +941,7 @@ atomicallySync proc=do
 
 
 -- |Saves the unsaved elems of the cache.
--- Cache writes allways save a coherent state.
+-- Cache writes always save a coherent state.
 --  Unlike `syncCache` this call deletes some elems from the cache when the number of elems > @sizeObjects@.
 --  The deletion depends on the check criteria, expressed by the first parameter.
 --  'defaultCheck' is the one implemented to be passed by default. Look at it to understand the clearing criteria.
@@ -961,7 +961,7 @@ clearSyncCache check1 sizeObjects= criticalSection saving $ do
   -- delete elems from the cache according with the checking criteria
   filtercache t cache lastSync = mapM_ filter1
     where
-    filter1 (CacheElem Nothing _)= return()  --alive because the dbref is being referenced elsewere
+    filter1 (CacheElem Nothing _)= return()  --alive because the dbref is being referenced elsewhere
     filter1 (CacheElem (Just (DBRef key1 _)) w) = do
      mr <-  deRefWeak w
      case mr of
@@ -978,15 +978,15 @@ clearSyncCache check1 sizeObjects= criticalSection saving $ do
 
 
 -- | This is a default cache clearance check. It forces to drop from the cache all the
--- elems not accesed since half the time between now and the last sync
+-- elems not accessed since half the time between now and the last sync
 -- if it returns True, the object will be discarded from the cache
 -- it is invoked when the cache size exceeds the number of objects configured
 -- in 'clearSyncCacheProc' or 'clearSyncCache'
 defaultCheck
        :: Integer    -- ^ current time in seconds
        -> Integer    -- ^ last access time for a given object
-       -> Integer    -- ^ last cache synchronization (with the persisten storage)
-       -> Bool       -- ^ return true for all the elems not accesed since half the time between now and the last sync
+       -> Integer    -- ^ last cache synchronization (with the persistent storage)
+       -> Bool       -- ^ return true for all the elems not accessed since half the time between now and the last sync
 defaultCheck  now lastAccess lastSync
         | lastAccess > halftime = False
         | otherwise  = True

@@ -17,7 +17,7 @@ data.persistent collection
      añadiendo elementos node  Node (refQueue a)
  implementar un query language
     by key
-    by attribute (addAttibute)
+    by attribute (addAttribute)
     by class
     xpath
  implementar un btree sobre el
@@ -102,7 +102,7 @@ isEmptySTM queue= do
 
 
 
--- | Get the reference to new or existing queue trough its name
+-- | Get the reference to new or existing queue through its name
 getQRef ::  (Typeable a, Serialize a)  => String -> RefQueue a
 getQRef n = getDBRef . key $ Queue n undefined undefined
 

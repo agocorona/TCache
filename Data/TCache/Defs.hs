@@ -58,7 +58,7 @@ Example:
 data Car= Car{owner :: DBRef Person , cname:: String} deriving (Show, Read, Eq, Typeable)
 @
 
-Since Person and Car are instances of 'Read' ans 'Show', by defining the 'Indexable' instance
+Since Person and Car are instances of 'Read' and 'Show', by defining the 'Indexable' instance
 will implicitly define the IResource instance for file persistence:
 
 @

@@ -102,7 +102,7 @@ main = do
 
   let myCompanyRef2 = read $ show myCompanyRef :: DBRef Company
   putMsg "DBRefs are identified by the key of the referenced object"
-  putMsg "DBRef's are alse instances of read"
+  putMsg "DBRef's are also instances of read"
 
   print myCompanyRef2
   putMsg "DBReference's with the same key point to the same data object"
@@ -114,7 +114,7 @@ main = do
 
   putMsg "Before salary increase, the company personnel is accessed with the second reference"
   printSalaries myCompanyRef2
-  putMsg "atomically increase the salaries of all the personel"
+  putMsg "atomically increase the salaries of all the personnel"
   atomically $ increaseSalaries 10
   putMsg "after the increase"
   printSalaries myCompanyRef2

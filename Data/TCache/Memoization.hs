@@ -37,7 +37,7 @@ data Cached a b= forall m.Executable m => Cached a (a -> m b) b Integer deriving
 context = unsafePerformIO newContext
 
 -- | given a string, return a key that can be used in Indexable instances
---  Of non persistent objects, such are cached objects (it changes fron execution to execution)
+--  Of non persistent objects, such are cached objects (it changes from execution to execution)
 -- . It uses `addrHash`
 addrStr :: a -> String
 addrStr x= "addr" ++ show hash
