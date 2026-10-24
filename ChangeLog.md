@@ -1,3 +1,15 @@
+* 1.0.0 : Breaking changes (hence the major version):
+  - The name of the files of the indexes of `Data.TCache.IndexQuery` has changed: from `index-<type><field>` to `index/<type>-<field>`.
+    The index files created by previous versions are not found by this one.
+  - `Show` of `DBRef` writes `DB# "key"` instead of `DBRef "key"`. `Read` accepts both formats, so the data written by previous
+    versions can be read, but the data written by this version can not be read by previous ones.
+  - The functions of `Data.TCache.IndexQuery` (`index`, `getIndex`, `join`, the relational operators...) and the instance
+    `IResource (Index reg a)` now require `Indexable reg`.
+  New:
+  - `referencedKeys`, a new method of `IResource` (default: no references): the keys of the DBRefs that a record contains.
+  - `syncDBRef`: saves a DBRef and, recursively, the DBRefs that it references (cycles are handled).
+  - `existDataForKey`: tells if there are data for a key, in the cache or in the permanent storage, without adding it to the cache.
+  Internal: `safeIOToSTM` uses `forkFinally`; `takeDBRef` reads the resource by key.
 * 0.13.x : (WIP) Major refaktoring and cleanups may break older code
 * 0.12.1.0 : Dropped Data.Hashtable (deprecated). Now it uses the package hashtables
 * 0.12.0.0 : space in index data in indexQuery.hs and IndexText.hs triggered errors in the AWS backend.  The space has been changed by \'-\'. So rename the "index *" files in the TCache folder in order to be recognized.  

@@ -33,8 +33,13 @@ type TPVar a =   TVar (Status(Elem a))
 
 data DBRef a = DBRef !String  !(TPVar a)  deriving Typeable
 
+-- WARNING: syncDBRef relies on referencedKeys, which for Serializable types is
+-- typically implemented by parsing the serialized form for "DB# \"key\"" patterns.
+-- Both "DB# \"key\"" (current) and "DBRef \"key\"" (legacy) must be matched.
+-- String fields containing either literal will cause spurious cache lookups but
+-- are otherwise harmless.
 instance  Show (DBRef a) where
-  show (DBRef key1 _)= "DBRef \""++ key1 ++ "\""
+  show (DBRef key1 _)= "DB# \""++ key1 ++ "\""
 
 instance Eq (DBRef a) where
   DBRef k _ == DBRef k' _ =  k == k'

@@ -66,6 +66,12 @@ class IResource a where
 
         delResources :: [a] -> IO()
         delResources= mapM_ delResource
+
+        -- | Keys of DBRefs embedded in this resource. Used by 'syncDBRef' for recursive saves.
+        -- Override this to enable recursive sync; default returns no references.
+        referencedKeys :: a -> [String]
+        referencedKeys _ = []
+        
 -- | Resources data definition used by 'withSTMResources'
 data Resources a b
        = Retry             -- ^ forces a retry

@@ -1,5 +1,5 @@
 name:           TCache
-version:        0.13.2
+version:        1.0.0
 cabal-version:  >= 1.10
 synopsis:       A Transactional cache with user-defined persistence
 description:    Please see the README on GitHub at <https://github.com/agocorona/TCache#readme>
@@ -48,7 +48,7 @@ library
   other-modules:
       Paths_TCache
   hs-source-dirs:
-      ./.
+      ./
   ghc-options: -Wall -Wcompat -Widentities
   build-depends:
       RefSerialize

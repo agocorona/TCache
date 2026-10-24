@@ -134,6 +134,7 @@ DBRefs and @*Resource(s)@ primitives are completely interoperable. The latter op
 ,writeDBRef
 ,delDBRef
 
+
 -- * @IResource@ class
 {- | Cached objects must be instances of `IResource`.
 Such instances can be implicitly derived trough auxiliary classes for file persistence.
@@ -287,17 +288,21 @@ clearsyncCache just pass elements from 2 to 1
 ,SyncMode(..)
 ,clearSyncCacheProc
 ,defaultCheck
+,existDataForKey
+,syncDBRef
 -- * Other
 ,onNothing
 )
 where
 
 
+import qualified Data.Set as Set
+
 import GHC.Conc
 import GHC.MVar(MVar)
 import Control.Monad(when, void)
 import qualified Data.HashTable.IO as H(BasicHashTable, new, insert, lookup, toList)
-import Data.IORef(IORef, newIORef, readIORef, writeIORef)
+import Data.IORef(IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import System.IO.Unsafe(unsafePerformIO)
 import System.IO(hPutStr, stderr)
 import Data.Maybe(catMaybes)
@@ -312,8 +317,9 @@ import System.Mem(performGC)
 import System.Mem.Weak(Weak, deRefWeak, mkWeakPtr, finalize)
 
 import Control.Concurrent.MVar(newMVar, newEmptyMVar, takeMVar, putMVar)
-import Control.Exception(catch, handle, throw, evaluate, bracket, SomeException)
-
+import Control.Concurrent(forkFinally)
+import Control.Exception(catch, handle, throw, evaluate, bracket, SomeException(..),throwIO)
+import Data.Maybe
 --import Debug.Trace
 --(!>) = flip trace
 
@@ -468,9 +474,12 @@ instance  (IResource a, Typeable a) => Read (DBRef a) where
     readsPrec _ str1= readit str
        where
        str = dropWhile isSpace str1
-       readit ('D':'B':'R':'e':'f':' ':'\"':str2)=
-         let   (key1,nstr) =  break (== '\"') str2
-         in  [( getDBRef key1 :: DBRef a, tail  nstr)]
+       readit ('D':'B':'#':' ':'\"':str2)=
+         let (key1,nstr) = break (== '\"') str2
+         in  [(getDBRef key1 :: DBRef a, tail nstr)]
+       readit ('D':'B':'R':'e':'f':' ':'\"':str2)=  -- legacy format
+         let (key1,nstr) = break (== '\"') str2
+         in  [(getDBRef key1 :: DBRef a, tail nstr)]
        readit  _ = []
 
 -- | Return the key of the object referenced by the DBRef
@@ -510,6 +519,26 @@ getDBRef key1 =   unsafePerformIO $! getDBRef1 $! key1 where
      H.insert cache key2 (CacheElem Nothing w)
      putMVar getRefFlag ()
      return  dbref
+
+-- | ligtweight way to read an object without adding the reference to it to the cache if it does not exist.
+
+-- | Check whether data for a key exists in cache or in persistent storage.
+-- Does not add anything to the cache. Pass a @Proxy a@ to fix the type.
+existDataForKey :: (IResource a, Typeable a) => a -> String -> IO Bool
+existDataForKey x k = do
+  (cache, _) <- readIORef refcache
+  mc <- H.lookup cache k
+  case mc of
+    Just (CacheElem _ w) -> do
+      mdbref <- deRefWeak w
+      case mdbref of
+        Just _  -> return True
+        Nothing -> checkDisk
+    Nothing -> checkDisk
+  where
+  checkDisk = isJust <$> (readResourceByKey k `asTypeOf` type1 x )
+  type1 :: a -> IO(Maybe a)
+  type1= undefined
 
 getRefFlag :: MVar ()
 {-# NOINLINE getRefFlag #-}
@@ -593,20 +622,47 @@ newDBRef x = do
 --        H.insert cache key ( CacheElem Nothing w)
 --      return dbref
 
--- | Delete the content of the DBRef form the cache and from permanent storage
+-- | Delete the content of the DBRef from the cache and from permanent storage
 delDBRef :: (IResource a, Typeable a) => DBRef a -> STM()
 delDBRef dbref@(DBRef _ tv)= do
   mr <- readDBRef dbref
+
   case mr of
    Just x -> do
      applyTriggers [dbref] [Nothing]
      writeTVar tv DoNotExist
-
      safeIOToSTM . criticalSection saving $ delResource x
 
    Nothing -> return ()
 
 
+
+-- | Save a single DBRef and recursively all DBRefs referenced by its record,
+-- as reported by 'referencedKeys'. Visited keys are tracked to handle cycles.
+syncDBRef :: (IResource a, Typeable a) => DBRef a -> IO ()
+syncDBRef root = do
+    visited <- newIORef Set.empty
+    criticalSection saving $ go visited (keyObjDBRef root)
+  where
+    go visited key1 = do
+        seen <- readIORef visited
+        if Set.member key1 seen then return () else do
+            modifyIORef visited (Set.insert key1)
+            (cache, _) <- readIORef refcache
+            mc <- H.lookup cache key1
+            case mc of
+                Nothing -> return ()
+                Just (CacheElem _ w) -> do
+                    mr <- deRefWeak w
+                    case mr of
+                        Nothing -> finalize w
+                        Just (DBRef _ tv) -> do
+                            r <- readTVarIO tv
+                            case r of
+                                Exist (Elem x _ _) -> do
+                                    writeResource x
+                                    mapM_ (go visited) (referencedKeys x)
+                                _ -> return ()
 
 -- | Handles Nothing cases in a simpler way than runMaybeT.
 -- it is used in infix notation. for example:
@@ -641,7 +697,7 @@ flushKey key1=  do
             Nothing -> unsafeIOToSTM (finalize w)  >> flushKey key1
        Nothing   -> return ()
 
--- | label the object as not existent in database
+-- | label the object as non existent in database
 invalidateKey :: String -> STM ()
 invalidateKey key1=  do
    (cache, _) <- unsafeIOToSTM $ readIORef refcache
@@ -764,20 +820,24 @@ takeDBRefs rs cache addToHash=  mapM (takeDBRef cache addToHash)  rs
 takeDBRef :: (IResource a, Typeable a) =>  Ht  -> CheckTPVarFlags -> a -> STM(Maybe (DBRef a))
 takeDBRef cache flags x =do
    let  keyr= keyResource x
+   takeDBRefByKey cache flags keyr
+
+takeDBRefByKey :: (IResource a, Typeable a) =>  Ht  -> CheckTPVarFlags -> String -> STM(Maybe (DBRef a))
+takeDBRefByKey cache flags keyr = do
    c <- unsafeIOToSTM $ H.lookup cache keyr
    case c of
        Just  (CacheElem _ w) -> do
           mr <- unsafeIOToSTM $ deRefWeak w
           case mr of
             Just dbref -> return . Just $! castErr dbref
-            Nothing -> unsafeIOToSTM (finalize w)  >> takeDBRef cache flags x
+            Nothing -> unsafeIOToSTM (finalize w)  >> takeDBRefByKey cache flags keyr
        Nothing   ->
            safeIOToSTM $ readToCache flags cache  keyr
               -- unsafeIOToSTM $ readResourceByKey keyr
 
    where
    readToCache flags1 cache1 key1= do
-       mr <- readResource x
+       mr <- readResourceByKey key1
        case mr of
             Nothing -> return Nothing
             Just r2 -> do
@@ -1049,13 +1109,25 @@ extract elems lastSave= filter1 [] [] (0:: Int)  elems
 -- so the IO computation must be idempotent.
 -- Exceptions are bubbled up to the STM transaction
 safeIOToSTM :: IO a -> STM a
-safeIOToSTM req= unsafeIOToSTM  $ do
-  tv   <- newEmptyMVar
-  _ <- forkIO $ (req  >>= putMVar  tv . Right)
-          `Control.Exception.catch`
-          (\(e :: SomeException) -> putMVar tv $ Left e )
+safeIOToSTM req = unsafeIOToSTM $ do
+  tv <- newEmptyMVar
+  void $ forkFinally req $ \result -> putMVar tv result  
   r <- takeMVar tv
   case r of
-   Right x -> return x
-   Left e -> throw e
+    Right x -> return x
+    Left e  -> throwIO (SomeException e)
 
+-- | when a STM transaction is retried, if the safeIOToSTM action changes as a result of the retry, 
+-- it is necessary to undo the effect before retry. the additional parameter is the compensation to be executed
+-- when  the IO action is interrupted by the STM transaction to perform a retry or when the IO action produces an error.
+safeIOToSTMComp :: IO a -> IO () -> STM a
+safeIOToSTMComp req reqCompensation = unsafeIOToSTM $ do
+  tv <- newEmptyMVar
+  forkFinally req $ \result ->
+    case result of
+      Right x  -> putMVar tv (Right x)  
+      Left  e  -> reqCompensation >> putMVar tv (Left e)  
+  mr <- takeMVar tv
+  case mr of
+    Right r  -> return r  
+    Left e   -> throwIO e

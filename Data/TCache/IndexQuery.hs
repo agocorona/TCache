@@ -70,7 +70,7 @@ fields in a registers are to be indexed, they must have different types.
 -}
 
 {-# LANGUAGE DeriveDataTypeable, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances,
- UndecidableInstances, TypeSynonymInstances, IncoherentInstances, MonoLocalBinds #-}
+ FlexibleContexts, UndecidableInstances, TypeSynonymInstances, IncoherentInstances, MonoLocalBinds #-}
 
 module Data.TCache.IndexQuery(
   index
@@ -106,7 +106,7 @@ instance (Read a,  Show a
       , Typeable a,Ord a,PersistIndex reg)
       => Queriable reg a
 
-instance  Queriable reg a => IResource (Index reg a) where
+instance  (Indexable reg,Queriable reg a) => IResource (Index reg a) where
   keyResource = key
   writeResource =defWriteResource
   readResourceByKey = defReadResourceByKey
@@ -133,23 +133,25 @@ instance (Queriable reg a) => Serializable (Index reg a)  where
 
 
 keyIndex :: (Show a1, Show a2) => a1 -> a2 -> String
-keyIndex treg tv= "index-" ++ show treg ++ show tv
+keyIndex treg tv= "index/" ++ show treg <> "-" <> show tv
 
-instance (Typeable reg, Typeable a) => Indexable (Index reg a) where
+instance (Indexable reg, Typeable reg, Typeable a) => Indexable (Index reg a) where
+   defPath index= defPath (getType index)
+      where
+      getType :: Index reg a -> reg
+      getType= undefined
+
    key map1= keyIndex typeofreg typeofa
-       where
-       [typeofreg, typeofa]= typeRepArgs $! typeOf map1
---   defPath index= defPath $ ofRegister index
---       where
---       ofRegister :: Index reg a -> reg
---       ofRegister = undefined -- type level
+      where
+      [typeofreg, typeofa]= typeRepArgs $! typeOf map1
+
 -- instance (Queriable reg a, Typeable reg, Typeable a) => IResource (Index reg a) where
 --  keyResource = key
 --  writeResource =defWriteResource
 --  readResourceByKey = defReadResourceByKey
 --  delResource = defDelResource
 
-getIndex :: (Queriable reg a)
+getIndex :: (Indexable reg,Queriable reg a)
    => ( reg -> a) -> a -> STM(DBRef (Index reg a), Index reg a,[DBRef reg])
 getIndex selector val= do
    let [one, two]= typeRepArgs $! typeOf selector
@@ -157,7 +159,7 @@ getIndex selector val= do
    getIndexr rindex val
 
 
-getIndexr :: (Queriable reg a)
+getIndexr :: (Indexable reg,Queriable reg a)
    => DBRef(Index reg a) -> a -> STM(DBRef (Index reg a), Index reg a,[DBRef reg])
 getIndexr rindex val= do
    mindex <- readDBRef rindex
@@ -165,19 +167,22 @@ getIndexr rindex val= do
    let index = case mindex of 
         Just (Index index) ->  index
         _ -> do
-             let fields= show $ typeOf  rindex
-             error $ "the index for "++ fields ++" do not exist. At main, use \"Data.TCache.IdexQuery.index\" to start indexing this field"
+             let fields= show $ typeOf $ typ rindex
+             error $ "the index for "++ fields ++" do not exist. At main, use \"Data.TCache.IdexQuery.index " <> fields <> "\" to start indexing this field"
 
    let dbrefs= case M.lookup  val index of
         Just  dbrefs -> dbrefs
         Nothing      -> []
 
    return (rindex, Index index, dbrefs)
+   where
+   typ :: DBRef (Index a b) -> b
+   typ = undefined
 
 selectorIndex
-  :: (Queriable reg a, IResource reg
-      ) =>
-     (reg -> a) -> DBRef (Index reg a) -> DBRef reg -> Maybe reg -> STM ()
+  :: (Queriable reg a, Indexable reg) =>
+     (reg -> a) -> DBRef (Index reg a) -> 
+     DBRef reg -> Maybe reg -> STM ()
 
 selectorIndex selector rindex1 pobject mobj1 = do
    moldobj <- readDBRef pobject
@@ -195,7 +200,7 @@ selectorIndex selector rindex1 pobject mobj1 = do
 
      (Just oldobj, Nothing) -> do  -- delete the old selector value from the index
           let val= selector oldobj
-          (rindex,Index index2, dbrefs) <-  getIndexr rindex1 val
+          (rindex,Index index2, dbrefs) <- getIndexr rindex1 val
           let dbrefs'=   Data.List.delete pobject  dbrefs
           writeDBRef rindex $ Index (M.insert  val dbrefs' index2)
 
@@ -209,7 +214,7 @@ selectorIndex selector rindex1 pobject mobj1 = do
  the indexed field can be used to perform relational-like searches
 -}
 
-index :: (Queriable reg a) => (reg -> a) -> IO ()
+index :: (Indexable reg, Queriable reg a) => (reg -> a) -> IO ()
 index sel= do
    let [one, two]= typeRepArgs $! typeOf sel
        rindex= getDBRef $! keyIndex one two
@@ -236,7 +241,7 @@ class RelationOps field1 field2 res | field1 field2 -> res  where
 
 -- Instance of relations betweeen fields and values
 -- field .op. value
-instance (Queriable reg a) => RelationOps (reg -> a) a  [DBRef reg] where
+instance (Indexable reg, Queriable reg a) => RelationOps (reg -> a) a  [DBRef reg] where
     (.==.) field value= do
        (_ ,_ ,dbrefs) <- getIndex field value
        return dbrefs
@@ -247,7 +252,7 @@ instance (Queriable reg a) => RelationOps (reg -> a) a  [DBRef reg] where
 
     (.>=.) field value= retrieve field value (>=)
 
-join:: (Queriable rec v, Queriable rec' v)
+join:: (Indexable rec,Queriable rec v, Indexable rec', Queriable rec' v)
        =>(v->v-> Bool) -> (rec -> v) -> (rec' -> v) -> STM[([DBRef rec], [DBRef rec'])]
 join op field1 field2 =do
   idxs   <- indexOf field1
@@ -263,7 +268,7 @@ type JoinData reg reg'=[([DBRef reg],[DBRef reg'])]
 
 -- Instance of relations betweeen fields
 -- field1 .op. field2
-instance (Queriable reg a ,Queriable reg' a ) =>RelationOps (reg -> a) (reg' -> a)  (JoinData reg reg') where
+instance (Indexable reg,Queriable reg a ,Indexable reg', Queriable reg' a ) =>RelationOps (reg -> a) (reg' -> a)  (JoinData reg reg') where
 
     (.==.)= join (==)
     (.>.) = join (>)
@@ -318,7 +323,7 @@ instance SetOperations  (JoinData a a') [DBRef a'] (JoinData a a') where
 
 
 -- |  return all  the (indexed)  values which this field has and a DBRef pointer to the register
-indexOf :: (Queriable reg a) => (reg -> a) -> STM [(a,[DBRef reg])]
+indexOf :: (Indexable reg, Queriable reg a) => (reg -> a) -> STM [(a,[DBRef reg])]
 indexOf selector= do
    let [one, two]= typeRepArgs $! typeOf selector
    let rindex= getDBRef $! keyIndex one two
@@ -329,11 +334,11 @@ indexOf selector= do
         let fields= show $ typeOf  selector
         error $ "the index for "++ fields ++" do not exist. At main, use \"Data.TCache.IndexQuery.index\" to start indexing this field"
 
-retrieve :: Queriable reg a => (reg -> a) -> a -> (a -> a -> Bool) -> STM[DBRef reg]
+retrieve :: (Indexable reg, Queriable reg a) => (reg -> a) -> a -> (a -> a -> Bool) -> STM[DBRef reg]
 retrieve field value op= do
    index1 <- indexOf field
-   let higuer = map (\(v, vals) -> if op v value then  vals else [])  index1
-   return $ concat higuer
+   let higher = map (\(v, vals) -> if op v value then  vals else [])  index1
+   return $ concat higher
 
 -- from a Query result, return the records, rather than the references
 recordsWith

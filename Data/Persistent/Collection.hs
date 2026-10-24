@@ -31,7 +31,7 @@ deleteElem, deleteElemSTM,updateElem,updateElemSTM,
 unreadSTM,isEmpty,isEmptySTM
 ) where
 import Data.Typeable
-import Control.Concurrent.STM(STM,atomically, retry)
+import Control.Concurrent.STM
 import Control.Monad
 import Data.TCache.DefaultPersistence
 
