@@ -1,3 +1,4 @@
+* 1.0.0.1 : Upper bounds for all the dependencies (tested with GHC 9.6 and 9.10). No other changes.
 * 1.0.0 : Breaking changes (hence the major version):
   - The name of the files of the indexes of `Data.TCache.IndexQuery` has changed: from `index-<type><field>` to `index/<type>-<field>`.
     The index files created by previous versions are not found by this one.

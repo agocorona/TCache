@@ -1,5 +1,5 @@
 name:           TCache
-version:        1.0.0
+version:        1.0.0.1
 cabal-version:  >= 1.10
 synopsis:       A Transactional cache with user-defined persistence
 description:    Please see the README on GitHub at <https://github.com/agocorona/TCache#readme>
